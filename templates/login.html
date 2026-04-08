@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NaverBlog Auto - 로그인</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0d0d0d; color:#e0e0e0; font-family:'Malgun Gothic',sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+.box { background:#161616; border:1px solid #2a2a2a; border-radius:12px; padding:40px; width:360px; text-align:center; }
+.logo { font-size:20px; font-weight:700; color:#00e676; margin-bottom:8px; }
+.sub { font-size:12px; color:#666; margin-bottom:32px; }
+input { width:100%; background:#1e1e1e; border:1px solid #2a2a2a; border-radius:8px; padding:12px 16px; color:#e0e0e0; font-size:14px; outline:none; margin-bottom:12px; font-family:inherit; }
+input:focus { border-color:#00e676; }
+button { width:100%; background:#00e676; color:#000; border:none; border-radius:8px; padding:12px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; }
+button:hover { background:#00ff88; }
+.error { color:#ff5252; font-size:12px; margin-bottom:12px; display:none; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">NaverBlog Auto</div>
+  <div class="sub">네이버 블로그 자동화 시스템</div>
+  <div class="error" id="err">비밀번호가 틀렸어요</div>
+  <input type="password" id="pw" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')login()" />
+  <button onclick="login()">로그인</button>
+</div>
+<script>
+async function login() {
+  const pw = document.getElementById('pw').value;
+  const res = await fetch('/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})});
+  const data = await res.json();
+  if (data.success) { window.location.href = '/'; }
+  else { document.getElementById('err').style.display = 'block'; }
+}
+</script>
+</body>
+</html>

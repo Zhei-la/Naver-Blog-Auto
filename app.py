@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from security import rate_limit, sanitize_input, add_security_headers, check_password, security_report, SECRET_KEY
 import sqlite3, os, json
 from datetime import datetime
 from writer import generate_post, suggest_keywords, BLOG_TYPES
@@ -6,6 +7,7 @@ from blogger import publish_post
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
+app.secret_key = SECRET_KEY
 DB = "/app/data/blog.db"
 
 def init_db():

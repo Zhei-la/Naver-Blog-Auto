@@ -335,6 +335,7 @@ async def on_ready():
     check_health.start()
     alert_morning.start()
     random_chat.start()
+    security_check.start()
 
 @alert_bot.event
 async def on_message(message):
@@ -409,6 +410,55 @@ async def before_alert_morning():
     await asyncio.sleep((target - now).total_seconds())
 
 
+
+
+@tasks.loop(hours=24)
+async def security_check():
+    """매일 오전 8시 보안 점검"""
+    channel = alert_bot.get_channel(CH_ID)
+    if not channel:
+        return
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{FLASK_URL}/api/security", timeout=aiohttp.ClientTimeout(total=10)) as res:
+                report = await res.json()
+        
+        status = report.get("status", "알 수 없음")
+        issues = report.get("issues", [])
+        blocked = report.get("blocked_ips", [])
+        
+        if status == "경고" or issues:
+            # 경고 있을 때
+            msg = await ai_response("alert", f"보안 점검 결과 경고 발생! 이슈: {issues}. 팀에게 알려줘")
+            embed = discord.Embed(title="⚠️ 보안 점검 경고!", description=msg, color=0xff9800, timestamp=datetime.now())
+            for issue in issues:
+                embed.add_field(name="⚠️ 이슈", value=issue, inline=False)
+            if blocked:
+                embed.add_field(name="🚫 차단된 IP", value=", ".join(blocked[:5]), inline=False)
+        else:
+            # 정상일 때
+            msg = await ai_response("alert", "오늘 보안 점검 완료. 모든 항목 정상이야. 팀에게 보고해줘")
+            embed = discord.Embed(title="🔒 보안 점검 완료", description=msg, color=0x00e676, timestamp=datetime.now())
+            embed.add_field(name="API 키", value="✅ 정상", inline=True)
+            embed.add_field(name="차단 IP", value=f"{len(blocked)}개", inline=True)
+            embed.add_field(name="상태", value="✅ 정상", inline=True)
+        
+        await channel.send(embed=embed)
+    
+    except Exception as e:
+        embed = discord.Embed(title="🚨 보안 점검 실패!", description=f"보안 점검 중 오류 발생: {str(e)}", color=0xff0000)
+        await channel.send(embed=embed)
+
+@security_check.before_loop
+async def before_security_check():
+    await alert_bot.wait_until_ready()
+    now = datetime.now()
+    target = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    if now >= target:
+        from datetime import timedelta
+        target += timedelta(days=1)
+    await asyncio.sleep((target - now).total_seconds())
 
 @tasks.loop(hours=3)
 async def random_chat():
