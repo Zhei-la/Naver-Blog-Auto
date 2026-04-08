@@ -348,16 +348,15 @@ async def on_message(message):
     if intent["intent"] == "error":
         accounts, posts = await get_stats()
         if accounts is None:
-            embed = discord.Embed(
-                title="🚨 긴급 오류 감지!",
-                description="Flask 서버 연결 실패! 즉각 조치 필요!",
-                color=0xff0000
-            )
-            embed.add_field(name="오류 내용", value="```Cannot connect to Flask server```")
-            embed.add_field(name="조치 필요", value="Railway 서버 상태 확인")
+            msg = await ai_response("alert", "서버 연결 오류 발생! 상황 설명해줘")
+            embed = discord.Embed(title="🚨 서버 연결 오류!", description=msg, color=0xff0000, timestamp=datetime.now())
+            embed.add_field(name="오류 내용", value="```Flask 서버 연결 실패```")
+            embed.add_field(name="조치 필요", value="Railway Naver-Blog-Auto 서버 재시작 필요")
             await message.channel.send(embed=embed)
         else:
-            msg = await ai_response("alert", "시스템 상태 점검 결과를 말해줘. 정상이야.", f"계정 {len(accounts)}개, 포스트 {len(posts)}개")
+            # 정상 상태
+            status = f"계정 {len(accounts)}개, 포스트 {len(posts)}개 - 모든 시스템 정상"
+            msg = await ai_response("alert", "오류 문의가 왔는데 현재 시스템은 정상이야. 안심시켜줘", status)
             embed = discord.Embed(description=msg, color=0x00e676)
             embed.set_author(name="감찰관 🚨")
             await message.channel.send(embed=embed)
@@ -369,17 +368,14 @@ async def check_health():
         return
     accounts, posts = await get_stats()
     if accounts is None:
-        msg = await ai_response("alert", "서버 연결 오류 발생! 긴급 알림 보내줘")
-        embed = discord.Embed(
-            title="🚨 시스템 오류 감지!",
-            description=msg,
-            color=0xff0000,
-            timestamp=datetime.now()
-        )
-        embed.add_field(name="⚠️ 오류 내용", value="```Flask 서버 연결 실패```", inline=False)
-        embed.add_field(name="조치 필요", value="Railway 서버 상태 확인", inline=False)
+        msg = await ai_response("alert", "Flask 서버 연결 실패! 긴급 알림 보내줘")
+        embed = discord.Embed(title="🚨 서버 연결 오류!", description=msg, color=0xff0000, timestamp=datetime.now())
+        embed.add_field(name="오류", value="```Flask 서버에 연결할 수 없습니다```")
+        embed.add_field(name="조치", value="Railway Naver-Blog-Auto 서버 상태 확인")
         await channel.send(embed=embed)
-    # 정상이면 조용히 패스
+    else:
+        # 정상 - 조용히 패스 (계정 0개는 정상 상태)
+        pass
 
 @tasks.loop(hours=24)
 async def alert_morning():
@@ -388,12 +384,19 @@ async def alert_morning():
         return
     await asyncio.sleep(16)  # 세번째로 말함
     accounts, posts = await get_stats()
-    status = "정상" if accounts else "오류"
-    msg = await ai_response("alert", f"오늘 아침 시스템 점검 결과를 보고해줘. 상태: {status}", "")
-    color = 0x00e676 if status == "정상" else 0xff0000
-    embed = discord.Embed(description=msg, color=color)
-    embed.set_author(name="감찰관 🚨")
-    await channel.send(embed=embed)
+    if accounts is None:
+        # 서버 연결 오류일 때만 알림
+        msg = await ai_response("alert", "서버 연결 오류로 아침 점검 실패. 팀에게 알려줘", "")
+        embed = discord.Embed(description=msg, color=0xff0000)
+        embed.set_author(name="감찰관 🚨")
+        await channel.send(embed=embed)
+    else:
+        # 정상 - 계정 수 상관없이 정상으로 처리
+        status_msg = f"계정 {len(accounts)}개 관리 중, 포스트 {len(posts)}개"
+        msg = await ai_response("alert", "아침 시스템 점검 완료. 정상 상태야. 짧게 보고해줘", status_msg)
+        embed = discord.Embed(description=msg, color=0x00e676)
+        embed.set_author(name="감찰관 🚨")
+        await channel.send(embed=embed)
 
 @alert_morning.before_loop
 async def before_alert_morning():
@@ -421,6 +424,14 @@ async def random_chat():
     published = len([p for p in posts if p["status"] == "published"])
     context = f"계정 {len(accounts)}개, 발행 {published}개"
     
+    if accounts is None:
+        # 서버 오류일 때만 알림
+        msg = await ai_response("alert", "서버 연결이 안 되고 있어. 팀에 알려줘")
+        embed = discord.Embed(description=msg, color=0xff0000)
+        embed.set_author(name=names.get("alert", "감찰관 🚨"))
+        await channel.send(embed=embed)
+        return
+
     # 랜덤 상황 선택
     situations = [
         "팀원들에게 중간 현황 업데이트 해줘",
