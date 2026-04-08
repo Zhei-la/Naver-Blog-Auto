@@ -204,3 +204,56 @@ if __name__ == '__main__':
     scheduler.start()
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+# ── 인게이저 API ──
+from engager import auto_like, auto_comment, auto_neighbor, auto_engage
+
+@app.route('/api/engage/like', methods=['POST'])
+def engage_like():
+    data = request.json
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
+    conn.close()
+    if not account:
+        return jsonify({"success": False, "message": "계정 없음"})
+    result = auto_like(account['naver_id'], account['naver_pw'],
+                       data.get('target', 'neighbor'), data.get('keyword', ''), data.get('count', 10))
+    return jsonify(result)
+
+@app.route('/api/engage/comment', methods=['POST'])
+def engage_comment():
+    data = request.json
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
+    conn.close()
+    if not account:
+        return jsonify({"success": False, "message": "계정 없음"})
+    result = auto_comment(account['naver_id'], account['naver_pw'],
+                          data.get('target', 'neighbor'), data.get('keyword', ''),
+                          data.get('count', 5), data.get('tone', 'friendly'), data.get('custom_comment', ''))
+    return jsonify(result)
+
+@app.route('/api/engage/neighbor', methods=['POST'])
+def engage_neighbor():
+    data = request.json
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
+    conn.close()
+    if not account:
+        return jsonify({"success": False, "message": "계정 없음"})
+    result = auto_neighbor(account['naver_id'], account['naver_pw'],
+                           data.get('keyword', ''), data.get('count', 10), data.get('message', ''))
+    return jsonify(result)
+
+@app.route('/api/engage/engage', methods=['POST'])
+def engage_all():
+    data = request.json
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
+    conn.close()
+    if not account:
+        return jsonify({"success": False, "message": "계정 없음"})
+    result = auto_engage(account['naver_id'], account['naver_pw'],
+                         data.get('target', 'neighbor'), data.get('keyword', ''),
+                         data.get('like_count', 10), data.get('comment_count', 5), data.get('tone', 'friendly'))
+    return jsonify(result)
