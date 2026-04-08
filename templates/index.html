@@ -244,9 +244,11 @@ tr:hover td { background:var(--s2); }
           <div class="fg">
             <label class="fl">키워드</label>
             <div class="btn-row" style="margin-bottom:5px;">
-              <input type="text" id="gen-keyword" placeholder="예: 강남 맛집 추천" style="flex:1;" />
+              <input type="text" id="gen-keyword" placeholder="키워드 입력 후 엔터 또는 추가" style="flex:1;" onkeydown="if(event.key==='Enter'){addGenKw();event.preventDefault();}" />
+              <button class="btn btn-ghost btn-sm" onclick="addGenKw()">+ 추가</button>
               <button class="btn btn-ghost btn-sm" onclick="suggestKeywords()">🔍 AI 추천</button>
             </div>
+            <div id="gen-kw-tags" class="kw-tags" style="margin-bottom:6px;"></div>
             <div id="kw-suggestions" class="kw-tags"></div>
           </div>
           <div class="fg"><label class="fl">글 형식</label>
@@ -851,16 +853,20 @@ async function suggestKeywords() {
 }
 
 function selectKeyword(kw) {
-  document.getElementById('gen-keyword').value = kw;
+  if (!genKws.includes(kw)) { genKws.push(kw); renderGenKws(); }
   document.getElementById('kw-suggestions').innerHTML = '';
+  document.getElementById('gen-keyword').value = '';
 }
 
 // 글 생성
 async function generatePost() {
   const accountId = document.getElementById('gen-account').value;
-  const keyword = document.getElementById('gen-keyword').value.trim();
+  // 입력창에 있는 키워드도 자동 추가
+  const inputKw = document.getElementById('gen-keyword').value.trim();
+  if (inputKw && !genKws.includes(inputKw)) { genKws.push(inputKw); renderGenKws(); document.getElementById('gen-keyword').value = ''; }
   if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
-  if (!keyword) { toast('키워드를 입력해주세요', 'error'); return; }
+  if (!genKws.length && !document.getElementById('gen-keyword').value.trim()) { toast('키워드를 입력해주세요', 'error'); return; }
+  const keyword = genKws.length > 0 ? genKws[Math.floor(Math.random() * genKws.length)] : document.getElementById('gen-keyword').value.trim();
   const btn = document.getElementById('gen-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 생성 중...';
   // 이미지 처리
@@ -1481,6 +1487,32 @@ async function suggestBulkKeyword() {
       container.innerHTML = data.keywords.map(k => `<div class="kw-tag" onclick="document.getElementById('bulk-keyword').value='${k}';document.getElementById('bulk-kw-suggestions').innerHTML=''">${k}</div>`).join('');
     }
   } catch(e) { toast('추천 실패', 'error'); container.innerHTML = ''; }
+}
+
+
+// 글 생성 키워드 여러개
+let genKws = [];
+
+function addGenKw() {
+  const input = document.getElementById('gen-keyword');
+  const kw = input.value.trim();
+  if (!kw) return;
+  if (!genKws.includes(kw)) {
+    genKws.push(kw);
+    renderGenKws();
+  }
+  input.value = '';
+}
+
+function removeGenKw(kw) {
+  genKws = genKws.filter(k => k !== kw);
+  renderGenKws();
+}
+
+function renderGenKws() {
+  document.getElementById('gen-kw-tags').innerHTML = genKws.map(kw =>
+    `<div class="kw-tag" style="background:var(--green-dim);border-color:var(--green);color:var(--green);" onclick="removeGenKw('${kw}')">${kw} ✕</div>`
+  ).join('');
 }
 
 loadAccountsData(); loadDashboard();
