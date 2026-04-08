@@ -139,8 +139,7 @@ def generate_post(keyword, blog_type="info", post_style="info", custom_prompt=""
 
     links_prompt = ""
     if place_name and place_link:
-        links_prompt += f"
-- 본문에 자연스럽게 네이버 플레이스 링크를 넣어줘: [{place_name}]({place_link})"
+        links_prompt += f"\n- 본문에 자연스럽게 네이버 플레이스 링크를 넣어줘: [{place_name}]({place_link})"
     if cta_link:
         links_prompt += f"\n- 글 마지막에 자연스럽게 이 링크를 넣어줘 (CTA): {cta_link}"
         if cta_text:
