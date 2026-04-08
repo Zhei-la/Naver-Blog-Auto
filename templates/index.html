@@ -192,6 +192,7 @@ tr:hover td { background:var(--s2); }
     <div class="nav-item" onclick="showPage('bulk')" data-page="bulk">📦 대량 발행</div>
     <div class="nav-item" onclick="showPage('schedule')" data-page="schedule">⏰ 자동 발행 설정</div>
     <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
+    <div class="nav-item" onclick="showPage('insight')" data-page="insight">📈 인사이트</div>
     <div class="nav-section">마케팅 자동화</div>
     <div class="nav-item" onclick="showPage('like')" data-page="like">❤️ 공감</div>
     <div class="nav-item" onclick="showPage('comment')" data-page="comment">💬 댓글</div>
@@ -508,6 +509,65 @@ tr:hover td { background:var(--s2); }
       <div id="scheduleTable"><div class="empty"><div class="empty-icon">⏰</div><div class="empty-text">등록된 스케줄이 없어요</div></div></div>
     </div>
   </div>
+
+  <!-- 인사이트 -->
+  <div class="page" id="page-insight">
+    <div class="page-header">
+      <div class="page-title">인사이트 <span>Analytics</span></div>
+    </div>
+    <div class="col2" style="margin-bottom:16px;align-items:flex-end;">
+      <div class="fg" style="margin:0;">
+        <label class="fl">계정 선택</label>
+        <select id="insight-account" onchange="resetInsight()"><option value="">계정을 선택하세요</option></select>
+      </div>
+      <div class="fg" style="margin:0;">
+        <label class="fl">날짜</label>
+        <input type="date" id="insight-date" value="" />
+      </div>
+      <button class="btn btn-primary" id="insight-btn" onclick="loadInsight()" style="white-space:nowrap;">📊 인사이트 불러오기</button>
+    </div>
+
+    <div id="insight-empty" class="card">
+      <div class="empty"><div class="empty-icon">📈</div><div class="empty-text">계정을 선택하고 불러오기를 눌러줘요</div></div>
+    </div>
+
+    <div id="insight-content" style="display:none;">
+      <!-- 일간 통계 -->
+      <div class="stats-row" style="margin-bottom:14px;">
+        <div class="stat-card"><div class="stat-val cg" id="ins-views">0</div><div class="stat-lbl">조회수</div></div>
+        <div class="stat-card"><div class="stat-val cb" id="ins-visitors">0</div><div class="stat-lbl">순방문자</div></div>
+        <div class="stat-card"><div class="stat-val cy" id="ins-likes">0</div><div class="stat-lbl">공감수</div></div>
+        <div class="stat-card"><div class="stat-val" style="color:#b39ddb;" id="ins-comments">0</div><div class="stat-lbl">댓글수</div></div>
+        <div class="stat-card"><div class="stat-val" style="color:#80cbc4;" id="ins-neighbors">0</div><div class="stat-lbl">이웃 증감</div></div>
+      </div>
+
+      <div class="col2">
+        <!-- 유입 키워드 -->
+        <div class="card">
+          <div class="card-title">🔍 유입 키워드 TOP 10</div>
+          <div id="ins-keywords">
+            <div class="empty" style="padding:20px;"><div class="empty-text">데이터 없음</div></div>
+          </div>
+        </div>
+
+        <!-- 인기 글 -->
+        <div class="card">
+          <div class="card-title">📝 인기 포스트</div>
+          <div id="ins-posts">
+            <div class="empty" style="padding:20px;"><div class="empty-text">데이터 없음</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 오류 메시지 -->
+      <div id="ins-error" style="display:none;" class="card">
+        <div style="color:var(--yellow);font-size:12px;padding:8px 0;">
+          ⚠️ 일부 데이터를 가져오지 못했습니다. 네이버 UI가 변경됐을 수 있어요.
+          <span id="ins-error-msg" style="color:var(--dim);"></span>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
 </div>
 
@@ -528,6 +588,24 @@ tr:hover td { background:var(--s2); }
         <div class="type-opt" data-type="info" onclick="selectBlogType(this)"><div class="type-opt-icon">📚</div><div class="type-opt-name">정보성</div></div>
       </div>
       <input type="hidden" id="acc-blog-type" value="monetize" />
+    </div>
+    <div class="fg">
+      <label class="fl">요금제 등급</label>
+      <div class="col3" style="gap:8px;">
+        <div class="pub-opt selected" id="grade-basic" onclick="selectGrade('basic')" style="padding:10px;">
+          <div style="font-size:16px;">🥉</div>
+          <div style="font-size:12px;font-weight:700;margin-top:3px;">베이직</div>
+        </div>
+        <div class="pub-opt" id="grade-pro" onclick="selectGrade('pro')" style="padding:10px;">
+          <div style="font-size:16px;">🥈</div>
+          <div style="font-size:12px;font-weight:700;margin-top:3px;">프로</div>
+        </div>
+        <div class="pub-opt" id="grade-premium" onclick="selectGrade('premium')" style="padding:10px;">
+          <div style="font-size:16px;">🥇</div>
+          <div style="font-size:12px;font-weight:700;margin-top:3px;">프리미엄</div>
+        </div>
+      </div>
+      <input type="hidden" id="acc-grade" value="basic" />
     </div>
     <hr class="divider">
     <div class="section-label">자동화 설정</div>
@@ -613,6 +691,24 @@ tr:hover td { background:var(--s2); }
         <div class="type-opt" data-type="info" onclick="selectEditType(this)"><div class="type-opt-icon">📚</div><div class="type-opt-name">정보성</div></div>
       </div>
     </div>
+    <div class="fg">
+      <label class="fl">요금제 등급</label>
+      <div class="col3" style="gap:8px;">
+        <div class="pub-opt" id="egrade-basic" onclick="selectEditGrade('basic')" style="padding:10px;">
+          <div style="font-size:16px;">🥉</div>
+          <div style="font-size:12px;font-weight:700;margin-top:3px;">베이직</div>
+        </div>
+        <div class="pub-opt" id="egrade-pro" onclick="selectEditGrade('pro')" style="padding:10px;">
+          <div style="font-size:16px;">🥈</div>
+          <div style="font-size:12px;font-weight:700;margin-top:3px;">프로</div>
+        </div>
+        <div class="pub-opt" id="egrade-premium" onclick="selectEditGrade('premium')" style="padding:10px;">
+          <div style="font-size:16px;">🥇</div>
+          <div style="font-size:12px;font-weight:700;margin-top:3px;">프리미엄</div>
+        </div>
+      </div>
+      <input type="hidden" id="edit-acc-grade" value="basic" />
+    </div>
     <hr class="divider">
     <div class="section-label">자동화 설정</div>
     <div class="toggle-row"><span class="toggle-label">❤️ 공감 자동화</span><div class="toggle" id="etog-like" onclick="eToggle('like')"></div></div>
@@ -675,6 +771,51 @@ tr:hover td { background:var(--s2); }
     </div>
   </div>
 </div>
+
+<!-- 계정 상세 모달 -->
+<div class="modal-bg" id="modal-account-detail">
+  <div class="modal" style="width:600px;">
+    <div class="modal-title" id="detail-title">계정 상세 정보</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <div class="fl">네이버 ID</div>
+        <div id="detail-naver-id" style="font-family:monospace;padding:4px 0;"></div>
+      </div>
+      <div>
+        <div class="fl">블로그 타입</div>
+        <div id="detail-blog-type" style="padding:4px 0;"></div>
+      </div>
+      <div>
+        <div class="fl">타겟 고객층</div>
+        <div id="detail-target" style="padding:4px 0;color:var(--text-dim);"></div>
+      </div>
+      <div>
+        <div class="fl">월 발행 목표</div>
+        <div id="detail-monthly-goal" style="padding:4px 0;color:var(--text-dim);"></div>
+      </div>
+      <div>
+        <div class="fl">계약 시작일</div>
+        <div id="detail-contract-start" style="padding:4px 0;color:var(--text-dim);"></div>
+      </div>
+      <div>
+        <div class="fl">자동화</div>
+        <div id="detail-auto" style="padding:4px 0;"></div>
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="fl">키워드 목록</div>
+    <div id="detail-keywords" class="kw-tags" style="margin:8px 0 14px;"></div>
+    <hr class="divider">
+    <div class="fl">메모</div>
+    <div id="detail-memo" style="padding:8px;background:var(--s2);border-radius:6px;margin:8px 0 14px;min-height:60px;font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--text-dim);"></div>
+    <div class="fl">특이사항</div>
+    <div id="detail-special" style="padding:8px;background:var(--s2);border-radius:6px;margin-top:6px;font-size:13px;color:var(--text-dim);"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-account-detail')">닫기</button>
+      <button class="btn btn-primary" id="detail-edit-btn">수정하기</button>
+    </div>
+  </div>
+</div>
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
@@ -694,6 +835,7 @@ function showPage(name) {
   if (name === 'accounts') loadAccounts();
   if (name === 'posts') loadPosts();
   if (name === 'schedule') loadSchedules();
+  if (name === 'insight') { loadAccountsData(); const sel = document.getElementById('insight-account'); if (!sel.options.length || sel.options[0].value === '') { const first = sel.options[0]; sel.innerHTML = ''; sel.appendChild(first); accounts.forEach(a => { const o = document.createElement('option'); o.value=a.id; o.textContent=a.client_name+' ('+a.naver_id+')'; sel.appendChild(o); }); } }
   if (name === 'bulk') renderBulkAccounts();
 }
 
@@ -791,7 +933,7 @@ async function loadAccounts() {
   const el = document.getElementById('accountsTable');
   if (!accounts.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div>'; return; }
   const typeNames = { monetize:'💰 수익화', ads:'📢 광고형', daily:'📖 일상', business:'🏪 사업체', info:'📚 정보성' };
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>블로그 타입</th><th>키워드</th><th>자동화</th><th>등록일</th><th>액션</th></tr></thead><tbody>'
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>등급</th><th>블로그 타입</th><th>키워드</th><th>자동화</th><th>등록일</th><th>액션</th></tr></thead><tbody>'
     + accounts.map(a => `<tr>
       <td><strong>${a.client_name}</strong></td>
       <td style="font-family:monospace;">${a.naver_id}</td>
@@ -1246,6 +1388,10 @@ function openEditAccount(id) {
   // 키워드 목록 로드
   try { editKws = JSON.parse(acc.keywords || '[]'); } catch(e) { editKws = []; }
   renderEditKws();
+  // 등급 로드
+  editGrade = acc.grade || 'basic';
+  ['basic','pro','premium'].forEach(o => document.getElementById('egrade-' + o).classList.remove('selected'));
+  document.getElementById('egrade-' + editGrade).classList.add('selected');
   openModal('modal-edit-account');
 }
 
@@ -1265,6 +1411,7 @@ async function saveEdit() {
   };
   if (pw) payload.naver_pw = pw;
   payload.keywords = editKws;
+  payload.grade = editGrade;
   if (pw) payload.naver_pw = pw;
   await fetch('/api/accounts/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
   toast('저장됐어요!', 'success');
@@ -1513,6 +1660,131 @@ function renderGenKws() {
   document.getElementById('gen-kw-tags').innerHTML = genKws.map(kw =>
     `<div class="kw-tag" style="background:var(--green-dim);border-color:var(--green);color:var(--green);" onclick="removeGenKw('${kw}')">${kw} ✕</div>`
   ).join('');
+}
+
+
+// 계정 상세 보기
+function openAccountDetail(id) {
+  const acc = accounts.find(a => a.id == id);
+  if (!acc) return;
+  const typeNames = {monetize:'💰 수익화', ads:'📢 광고형', daily:'📖 일상', business:'🏪 사업체', info:'📚 정보성'};
+  document.getElementById('detail-title').textContent = acc.client_name + ' 상세 정보';
+  document.getElementById('detail-naver-id').textContent = acc.naver_id;
+  document.getElementById('detail-blog-type').textContent = typeNames[acc.blog_type] || acc.blog_type;
+  document.getElementById('detail-target').textContent = acc.target_audience || '-';
+  document.getElementById('detail-monthly-goal').textContent = acc.monthly_goal ? acc.monthly_goal + '개/월' : '-';
+  document.getElementById('detail-contract-start').textContent = acc.contract_start || '-';
+  document.getElementById('detail-auto').innerHTML = (acc.auto_like?'❤️ 공감 ':' ') + (acc.auto_comment?'💬 댓글 ':' ') + (acc.auto_neighbor?'👥 이웃':' ') || '없음';
+  document.getElementById('detail-memo').textContent = acc.memo || '메모 없음';
+  document.getElementById('detail-special').textContent = acc.special_notes || '없음';
+  // 키워드
+  try {
+    const kws = JSON.parse(acc.keywords || '[]');
+    document.getElementById('detail-keywords').innerHTML = kws.length
+      ? kws.map(k => `<div class="kw-tag">${k}</div>`).join('')
+      : '<span style="color:var(--text-dim);font-size:12px;">등록된 키워드 없음</span>';
+  } catch(e) { document.getElementById('detail-keywords').innerHTML = '-'; }
+  // 수정 버튼 연결
+  document.getElementById('detail-edit-btn').onclick = () => { closeModal('modal-account-detail'); openEditAccount(id); };
+  openModal('modal-account-detail');
+}
+
+
+// 등급 선택
+let selectedGrade = 'basic';
+let editGrade = 'basic';
+
+const gradeNames = { basic: '🥉 베이직', pro: '🥈 프로', premium: '🥇 프리미엄' };
+const gradeColors = { basic: '#cd7f32', pro: '#c0c0c0', premium: '#ffd700' };
+
+function selectGrade(g) {
+  selectedGrade = g;
+  ['basic','pro','premium'].forEach(o => document.getElementById('grade-' + o).classList.remove('selected'));
+  document.getElementById('grade-' + g).classList.add('selected');
+  document.getElementById('acc-grade').value = g;
+}
+
+function selectEditGrade(g) {
+  editGrade = g;
+  ['basic','pro','premium'].forEach(o => document.getElementById('egrade-' + o).classList.remove('selected'));
+  document.getElementById('egrade-' + g).classList.add('selected');
+  document.getElementById('edit-acc-grade').value = g;
+}
+
+document.getElementById('insight-date').value = new Date().toISOString().slice(0,10);
+
+// 인사이트
+function resetInsight() {
+  document.getElementById('insight-empty').style.display = 'block';
+  document.getElementById('insight-content').style.display = 'none';
+}
+
+async function loadInsight() {
+  const accountId = document.getElementById('insight-account').value;
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  
+  const btn = document.getElementById('insight-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 불러오는 중... (1~2분 소요)';
+  
+  const date = document.getElementById('insight-date').value;
+  const url = '/api/insight/' + accountId + (date ? '?date=' + date : '');
+  
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    if (!data.success && !data.daily) {
+      toast('불러오기 실패: ' + data.error, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '📊 인사이트 불러오기';
+      return;
+    }
+    
+    // 일간 통계
+    document.getElementById('ins-views').textContent = data.daily?.views || '0';
+    document.getElementById('ins-visitors').textContent = data.daily?.visitors || '0';
+    document.getElementById('ins-likes').textContent = data.daily?.likes || '0';
+    document.getElementById('ins-comments').textContent = data.daily?.comments || '0';
+    const neighborChange = parseInt(data.daily?.neighbor_change || '0');
+    const neighborEl = document.getElementById('ins-neighbors');
+    neighborEl.textContent = (neighborChange > 0 ? '+' : '') + neighborChange;
+    neighborEl.style.color = neighborChange > 0 ? 'var(--green)' : neighborChange < 0 ? 'var(--red)' : '#80cbc4';
+    
+    // 유입 키워드
+    const kwEl = document.getElementById('ins-keywords');
+    if (data.keywords && data.keywords.length > 0) {
+      kwEl.innerHTML = data.keywords.map((kw, i) => `
+        <div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1a1a1a;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:10px;color:var(--dim);width:16px;">${i+1}</span>
+            <span style="font-size:13px;">${kw.keyword}</span>
+          </div>
+          <span style="font-size:12px;color:var(--green);font-family:monospace;">${kw.count}</span>
+        </div>`).join('');
+    } else {
+      kwEl.innerHTML = '<div class="empty" style="padding:20px;"><div class="empty-text">유입 키워드 데이터 없음</div></div>';
+    }
+    
+    // 오류 메시지
+    if (data.error) {
+      document.getElementById('ins-error').style.display = 'block';
+      document.getElementById('ins-error-msg').textContent = ' (' + data.error + ')';
+    } else {
+      document.getElementById('ins-error').style.display = 'none';
+    }
+    
+    document.getElementById('insight-empty').style.display = 'none';
+    document.getElementById('insight-content').style.display = 'block';
+    
+    toast('인사이트 불러오기 완료!', 'success');
+    
+  } catch(e) {
+    toast('오류 발생: ' + e.message, 'error');
+  }
+  
+  btn.disabled = false;
+  btn.innerHTML = '📊 인사이트 불러오기';
 }
 
 loadAccountsData(); loadDashboard();

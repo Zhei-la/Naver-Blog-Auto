@@ -28,6 +28,12 @@ def init_db():
         auto_target TEXT DEFAULT 'neighbor',
         auto_keyword TEXT DEFAULT '',
         keywords TEXT DEFAULT '[]',
+        grade TEXT DEFAULT 'basic',
+        memo TEXT DEFAULT '',
+        target_audience TEXT DEFAULT '',
+        monthly_goal INTEGER DEFAULT 0,
+        contract_start TEXT DEFAULT '',
+        special_notes TEXT DEFAULT '',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS posts (
@@ -53,6 +59,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         account_id INTEGER NOT NULL,
         keywords TEXT DEFAULT '[]',
+        grade TEXT DEFAULT 'basic',
         post_times TEXT DEFAULT '[]',
         post_style TEXT DEFAULT 'info',
         is_active INTEGER DEFAULT 1,
@@ -89,7 +96,9 @@ def add_account():
          d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
          d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
          d.get('auto_target','neighbor'), d.get('auto_keyword',''),
-         _json.dumps(d.get('keywords',[]))))
+         _json.dumps(d.get('keywords',[])),
+         d.get('memo',''), d.get('target_audience',''),
+         d.get('monthly_goal',0), d.get('contract_start',''), d.get('special_notes','')))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -103,12 +112,12 @@ def update_account(aid):
         client_name=?, naver_id=?, blog_type=?,
         auto_like=?, auto_comment=?, auto_neighbor=?,
         auto_like_count=?, auto_comment_count=?, auto_neighbor_count=?,
-        auto_target=?, auto_keyword=?, keywords=? WHERE id=?''',
+        auto_target=?, auto_keyword=?, keywords=?, grade=? WHERE id=?''',
         (d.get('client_name',''), d.get('naver_id',''), d.get('blog_type','info'),
          d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
          d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
          d.get('auto_target','neighbor'), d.get('auto_keyword',''),
-         _json.dumps(d.get('keywords',[])), aid))
+         _json.dumps(d.get('keywords',[])), d.get('grade','basic'), aid))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -386,6 +395,20 @@ def check_scheduled_posts():
 def index():
     return render_template('index.html')
 
+
+# ── 인사이트 API ──
+from insight import get_blog_insight
+
+@app.route('/api/insight/<int:account_id>', methods=['GET'])
+def get_insight(account_id):
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id=?', (account_id,)).fetchone()
+    conn.close()
+    if not account:
+        return jsonify({'success': False, 'message': '계정 없음'})
+    date = request.args.get('date', None)
+    result = get_blog_insight(account['naver_id'], account['naver_pw'], date)
+    return jsonify(result)
 if __name__ == '__main__':
     init_db()
     scheduler = BackgroundScheduler()
