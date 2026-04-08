@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install discord.py==2.3.2 aiohttp==3.9.3 openai==1.57.0 httpx==0.27.0 python-dotenv
+
+COPY . .
+
+CMD ["python", "bots.py"]

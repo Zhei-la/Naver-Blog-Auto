@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NaverBlog Auto</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#0d0d0d; --s:#161616; --s2:#1e1e1e; --border:#2a2a2a;
+  --green:#00e676; --gdim:rgba(0,200,80,0.1);
+  --red:#ff5252; --yellow:#ffd740; --blue:#40c4ff; --purple:#b39ddb;
+  --text:#e0e0e0; --dim:#666; --r:8px;
+}
+html,body { writing-mode:horizontal-tb !important; background:var(--bg); color:var(--text);
+  font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif; font-size:13px; line-height:1.6; }
+.layout { display:flex; flex-direction:row; min-height:100vh; }
+
+/* 사이드바 */
+.sidebar { width:220px; min-width:220px; background:var(--s); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; height:100vh; position:sticky; top:0; overflow-y:auto; }
+.logo { padding:16px; border-bottom:1px solid var(--border); }
+.logo h1 { font-size:14px; color:var(--green); font-weight:700; }
+.logo p { font-size:10px; color:var(--dim); margin-top:2px; }
+.nav { padding:8px 0; flex:1; }
+.nav-section { padding:10px 14px 4px; font-size:10px; color:#444; text-transform:uppercase; letter-spacing:1px; }
+.nav-item { display:flex; flex-direction:row; align-items:center; gap:7px; padding:8px 14px;
+  cursor:pointer; font-size:12px; color:var(--dim); border-left:3px solid transparent;
+  transition:all 0.15s; white-space:nowrap; }
+.nav-item:hover { color:var(--text); background:var(--s2); }
+.nav-item.active { color:var(--green); border-left-color:var(--green); background:var(--gdim); }
+.side-accs { padding:8px; border-top:1px solid var(--border); }
+.side-accs-title { font-size:10px; color:#444; text-transform:uppercase; letter-spacing:1px; padding:4px 4px 6px; }
+.acc-chip { display:flex; flex-direction:row; align-items:center; gap:6px; padding:5px 8px;
+  border-radius:6px; cursor:pointer; font-size:11px; color:var(--dim); margin-bottom:2px; white-space:nowrap; overflow:hidden; }
+.acc-chip:hover { background:var(--s2); color:var(--text); }
+.acc-dot { width:5px; height:5px; border-radius:50%; background:var(--green); flex-shrink:0; }
+
+/* 메인 */
+.main { flex:1; padding:24px; overflow-y:auto; }
+.page { display:none; }
+.page.active { display:block; }
+.page-header { display:flex; flex-direction:row; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.page-title { font-size:17px; font-weight:700; }
+.page-title span { color:var(--green); }
+
+/* 통계 */
+.stats-row { display:flex; flex-direction:row; gap:10px; margin-bottom:14px; }
+.stat-card { flex:1; background:var(--s); border:1px solid var(--border); border-radius:var(--r); padding:14px; }
+.stat-val { font-size:24px; font-weight:700; font-family:monospace; }
+.stat-lbl { font-size:10px; color:var(--dim); margin-top:2px; }
+.cg { color:var(--green); } .cb { color:var(--blue); } .cy { color:var(--yellow); } .cp { color:var(--purple); }
+
+/* 카드 */
+.card { background:var(--s); border:1px solid var(--border); border-radius:var(--r); padding:16px; margin-bottom:12px; }
+.card-title { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; font-weight:600; }
+
+/* 컬럼 */
+.col2 { display:flex; flex-direction:row; gap:12px; }
+.col2>* { flex:1; min-width:0; }
+.col3 { display:flex; flex-direction:row; gap:10px; }
+.col3>* { flex:1; min-width:0; }
+
+/* 폼 */
+.fg { margin-bottom:10px; }
+.fl { font-size:11px; color:var(--dim); margin-bottom:4px; display:block; font-weight:600; }
+input,select,textarea { width:100%; background:var(--s2); border:1px solid var(--border); border-radius:var(--r);
+  padding:7px 10px; color:var(--text); font-size:12px; font-family:inherit; outline:none;
+  transition:border-color 0.15s; writing-mode:horizontal-tb; }
+input:focus,select:focus,textarea:focus { border-color:var(--green); }
+textarea { resize:vertical; min-height:80px; }
+
+/* 버튼 */
+.btn { display:inline-flex; flex-direction:row; align-items:center; justify-content:center; gap:4px;
+  padding:7px 14px; border-radius:var(--r); border:none; cursor:pointer; font-size:12px;
+  font-family:inherit; font-weight:500; transition:all 0.15s; white-space:nowrap; }
+.btn-primary { background:var(--green); color:#000; }
+.btn-primary:hover { background:#00ff88; }
+.btn-primary:disabled { background:#333; color:var(--dim); cursor:not-allowed; }
+.btn-ghost { background:transparent; border:1px solid var(--border); color:var(--dim); }
+.btn-ghost:hover { border-color:var(--dim); color:var(--text); }
+.btn-danger { background:transparent; border:1px solid var(--red); color:var(--red); }
+.btn-danger:hover { background:var(--red); color:#000; }
+.btn-blue { background:var(--blue); color:#000; }
+.btn-yellow { background:var(--yellow); color:#000; }
+.btn-sm { padding:4px 9px; font-size:11px; }
+.btn-full { width:100%; }
+.btn-row { display:flex; flex-direction:row; gap:6px; align-items:center; flex-wrap:wrap; }
+
+/* 태그 */
+.kw-tags { display:flex; flex-direction:row; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.kw-tag { background:var(--s2); border:1px solid var(--border); border-radius:20px;
+  padding:3px 10px; font-size:11px; cursor:pointer; transition:all 0.15s; color:var(--dim); }
+.kw-tag:hover { border-color:var(--green); color:var(--green); background:var(--gdim); }
+
+/* 이미지 */
+.img-preview { display:flex; flex-direction:row; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.img-thumb { width:70px; height:52px; border-radius:5px; object-fit:cover; border:1px solid var(--border); }
+
+/* 발행 옵션 */
+.pub-opts { display:flex; flex-direction:row; gap:8px; }
+.pub-opt { flex:1; border:1px solid var(--border); border-radius:var(--r); padding:8px; cursor:pointer; text-align:center; transition:all 0.15s; }
+.pub-opt:hover { border-color:var(--green); }
+.pub-opt.selected { border-color:var(--green); background:var(--gdim); }
+.pub-opt-title { font-size:12px; font-weight:600; margin-bottom:2px; }
+.pub-opt-desc { font-size:10px; color:var(--dim); }
+
+/* 타겟 옵션 */
+.target-opts { display:flex; flex-direction:row; gap:8px; margin-bottom:10px; }
+.target-opt { flex:1; border:1px solid var(--border); border-radius:var(--r); padding:7px; cursor:pointer; text-align:center; transition:all 0.15s; font-size:12px; color:var(--dim); }
+.target-opt:hover { border-color:var(--green); color:var(--text); }
+.target-opt.selected { border-color:var(--green); color:var(--green); background:var(--gdim); }
+
+/* 블로그 타입 */
+.type-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:10px; }
+.type-opt { border:1px solid var(--border); border-radius:var(--r); padding:8px 4px; cursor:pointer; text-align:center; transition:all 0.15s; }
+.type-opt:hover { border-color:var(--green); }
+.type-opt.selected { border-color:var(--green); background:var(--gdim); }
+.type-opt-icon { font-size:18px; margin-bottom:3px; }
+.type-opt-name { font-size:10px; color:var(--dim); }
+
+/* 토글 */
+.toggle-row { display:flex; flex-direction:row; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #1a1a1a; }
+.toggle-label { font-size:12px; }
+.toggle { width:36px; height:20px; background:#333; border-radius:10px; cursor:pointer; position:relative; transition:background 0.2s; }
+.toggle.on { background:var(--green); }
+.toggle::after { content:''; position:absolute; width:14px; height:14px; background:#fff; border-radius:50%; top:3px; left:3px; transition:left 0.2s; }
+.toggle.on::after { left:19px; }
+
+/* 테이블 */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:12px; white-space:nowrap; }
+th { padding:7px 10px; text-align:left; color:var(--dim); font-weight:600; border-bottom:1px solid var(--border); font-size:10px; text-transform:uppercase; }
+td { padding:9px 10px; border-bottom:1px solid #1a1a1a; vertical-align:middle; }
+tr:hover td { background:var(--s2); }
+
+/* 배지 */
+.badge { padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; }
+.bg { background:var(--gdim); color:var(--green); }
+.by { background:rgba(255,215,64,0.1); color:var(--yellow); }
+.bb { background:rgba(64,196,255,0.1); color:var(--blue); }
+.bp { background:rgba(179,157,219,0.1); color:var(--purple); }
+
+/* 결과박스 */
+.result-box { margin-top:10px; padding:10px; border-radius:var(--r); font-size:12px; }
+.result-ok { background:var(--gdim); color:var(--green); }
+.result-err { background:rgba(255,82,82,0.1); color:var(--red); }
+
+/* 빈상태 */
+.empty { text-align:center; padding:36px 20px; color:var(--dim); }
+.empty-icon { font-size:28px; margin-bottom:6px; }
+.empty-text { font-size:12px; }
+
+/* 로딩 */
+.spinner { display:inline-block; width:11px; height:11px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin 0.7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* 토스트 */
+.toast-wrap { position:fixed; bottom:16px; right:16px; z-index:9999; display:flex; flex-direction:column; gap:6px; }
+.toast { background:var(--s2); border:1px solid var(--border); border-radius:var(--r); padding:9px 13px; font-size:12px; min-width:180px; animation:fi 0.2s ease; }
+.toast.success { border-left:3px solid var(--green); }
+.toast.error { border-left:3px solid var(--red); }
+.toast.info { border-left:3px solid var(--blue); }
+@keyframes fi { from { opacity:0; transform:translateX(10px); } to { opacity:1; transform:none; } }
+
+/* 모달 */
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:1000; align-items:center; justify-content:center; }
+.modal-bg.open { display:flex; }
+.modal { background:var(--s); border:1px solid var(--border); border-radius:12px; padding:20px; width:500px; max-width:90vw; max-height:88vh; overflow-y:auto; }
+.modal-title { font-size:14px; font-weight:700; margin-bottom:14px; }
+.modal-footer { display:flex; flex-direction:row; gap:6px; justify-content:flex-end; margin-top:14px; }
+
+.divider { border:none; border-top:1px solid var(--border); margin:12px 0; }
+.section-label { font-size:10px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- 사이드바 -->
+<aside class="sidebar">
+  <div class="logo">
+    <h1>NaverBlog Auto</h1>
+    <p>네이버 블로그 자동화</p>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">메인</div>
+    <div class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard">📊 대시보드</div>
+    <div class="nav-item" onclick="showPage('accounts')" data-page="accounts">👤 계정 관리</div>
+    <div class="nav-section">글 작성</div>
+    <div class="nav-item" onclick="showPage('generate')" data-page="generate">✍️ 글 생성</div>
+    <div class="nav-item" onclick="showPage('bulk')" data-page="bulk">📦 대량 발행</div>
+    <div class="nav-item" onclick="showPage('schedule')" data-page="schedule">⏰ 자동 발행 설정</div>
+    <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
+    <div class="nav-section">마케팅 자동화</div>
+    <div class="nav-item" onclick="showPage('like')" data-page="like">❤️ 공감</div>
+    <div class="nav-item" onclick="showPage('comment')" data-page="comment">💬 댓글</div>
+    <div class="nav-item" onclick="showPage('neighbor')" data-page="neighbor">👥 서로이웃</div>
+    <div class="nav-item" onclick="showPage('engage')" data-page="engage">⚡ 공감+댓글</div>
+  </nav>
+  <div class="side-accs">
+    <div class="side-accs-title">계정 목록</div>
+    <div id="sideAccounts"><div style="font-size:11px;color:#444;padding:4px;">등록된 계정 없음</div></div>
+  </div>
+</aside>
+
+<!-- 메인 -->
+<main class="main">
+
+  <!-- 대시보드 -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header"><div class="page-title">대시보드 <span>Overview</span></div></div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val cg" id="s-accounts">0</div><div class="stat-lbl">관리 계정</div></div>
+      <div class="stat-card"><div class="stat-val cb" id="s-total">0</div><div class="stat-lbl">전체 포스트</div></div>
+      <div class="stat-card"><div class="stat-val cy" id="s-published">0</div><div class="stat-lbl">발행 완료</div></div>
+      <div class="stat-card"><div class="stat-val cp" id="s-scheduled">0</div><div class="stat-lbl">예약 발행</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">최근 포스트</div>
+      <div id="recentPosts"><div class="empty"><div class="empty-icon">📝</div><div class="empty-text">아직 포스트가 없어요</div></div></div>
+    </div>
+  </div>
+
+  <!-- 계정 관리 -->
+  <div class="page" id="page-accounts">
+    <div class="page-header">
+      <div class="page-title">계정 <span>관리</span></div>
+      <button class="btn btn-primary" onclick="openModal('modal-account')">+ 계정 추가</button>
+    </div>
+    <div class="card">
+      <div id="accountsTable"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div></div>
+    </div>
+  </div>
+
+  <!-- 글 생성 -->
+  <div class="page" id="page-generate">
+    <div class="page-header"><div class="page-title">글 <span>생성</span></div></div>
+    <div class="col2">
+      <div>
+        <div class="card">
+          <div class="card-title">기본 설정</div>
+          <div class="fg"><label class="fl">계정 선택</label><select id="gen-account"><option value="">계정을 선택하세요</option></select></div>
+          <div class="fg">
+            <label class="fl">키워드</label>
+            <div class="btn-row" style="margin-bottom:5px;">
+              <input type="text" id="gen-keyword" placeholder="예: 강남 맛집 추천" style="flex:1;" />
+              <button class="btn btn-ghost btn-sm" onclick="suggestKeywords()">🔍 AI 추천</button>
+            </div>
+            <div id="kw-suggestions" class="kw-tags"></div>
+          </div>
+          <div class="fg"><label class="fl">글 형식</label>
+            <select id="gen-style">
+              <option value="info">📚 정보성 글</option>
+              <option value="review">⭐ 후기/리뷰</option>
+              <option value="listicle">📋 리스트형</option>
+              <option value="story">💬 스토리텔링</option>
+              <option value="compare">⚖️ 비교형</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">추가 요청 (선택)</label><textarea id="gen-prompt" placeholder="예: 20대 직장인 타겟, 제품 3개 비교해줘" style="min-height:60px;"></textarea></div>
+          <div class="col2">
+            <div class="fg"><label class="fl">글자수</label>
+              <select id="gen-wordcount">
+                <option value="600">600자 (짧게)</option>
+                <option value="1000" selected>1000자 (보통)</option>
+                <option value="1500">1500자 (길게)</option>
+                <option value="2000">2000자 (상세)</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">사진 장수</label>
+              <select id="gen-imgcount">
+                <option value="1">1장</option>
+                <option value="2">2장</option>
+                <option value="3" selected>3장</option>
+                <option value="5">5장</option>
+              </select>
+            </div>
+          </div>
+          <div class="fg"><label class="fl">📍 네이버 플레이스 업체명 (맛집/카페 등)</label><input type="text" id="gen-place" placeholder="예: 강남 스타벅스 삼성점" /></div>
+          <div class="fg">
+            <label class="fl">🖼️ 이미지 업로드 (AI가 인식해서 글 작성)</label>
+            <input type="file" id="gen-image" accept="image/*" onchange="previewUploadedImage()" style="padding:6px;" />
+            <div id="uploaded-preview" style="margin-top:6px;"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">수익 링크 설정 (선택)</div>
+          <div class="fg"><label class="fl">CTA 링크</label><input type="text" id="gen-cta-link" placeholder="https://example.com" /></div>
+          <div class="fg"><label class="fl">CTA 문구</label><input type="text" id="gen-cta-text" placeholder="예: 지금 바로 확인하기 →" /></div>
+          <div class="fg"><label class="fl">CPA 링크 (제휴)</label><input type="text" id="gen-cpa-link" placeholder="https://affiliate.example.com" /></div>
+          <div class="fg"><label class="fl">CPS 링크 (쇼핑)</label><input type="text" id="gen-cps-link" placeholder="https://shop.example.com" /></div>
+        </div>
+        <div class="card">
+          <div class="card-title">발행 설정</div>
+          <div class="pub-opts" style="margin-bottom:10px;">
+            <div class="pub-opt selected" id="opt-review" onclick="selectPubOpt('review')"><div class="pub-opt-title">👀 검토 후</div><div class="pub-opt-desc">미리보기 확인</div></div>
+            <div class="pub-opt" id="opt-now" onclick="selectPubOpt('now')"><div class="pub-opt-title">🚀 즉시</div><div class="pub-opt-desc">바로 발행</div></div>
+            <div class="pub-opt" id="opt-schedule" onclick="selectPubOpt('schedule')"><div class="pub-opt-title">⏰ 예약</div><div class="pub-opt-desc">시간 지정</div></div>
+          </div>
+          <div id="schedule-input" style="display:none;" class="fg"><label class="fl">예약 일시</label><input type="datetime-local" id="gen-scheduled-at" /></div>
+          <button class="btn btn-primary btn-full" id="gen-btn" onclick="generatePost()">✨ AI 글 생성</button>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="position:sticky;top:16px;">
+          <div class="card-title">미리보기</div>
+          <div id="preview-empty" class="empty" style="padding:40px 0;"><div class="empty-icon">✍️</div><div class="empty-text">글을 생성하면 여기에 표시돼요</div></div>
+          <div id="preview-content" style="display:none;">
+            <div class="fg"><label class="fl">제목</label><input type="text" id="preview-title" /></div>
+            <div id="preview-images" class="img-preview"></div>
+            <div class="fg" style="margin-top:8px;"><label class="fl">본문</label><textarea id="preview-body" style="min-height:200px;"></textarea></div>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="publishPost()" id="pub-btn" style="flex:1;">🚀 네이버 발행</button>
+              <button class="btn btn-ghost" onclick="saveOnly()">저장만</button>
+              <button class="btn btn-danger btn-sm" onclick="discardPost()">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 대량 발행 -->
+  <div class="page" id="page-bulk">
+    <div class="page-header"><div class="page-title">대량 <span>발행</span></div></div>
+    <div class="col2">
+      <div class="card">
+        <div class="card-title">대량 글 생성 설정</div>
+        <div class="fg"><label class="fl">계정 선택 (여러 개 가능)</label><div id="bulk-accounts"></div></div>
+        <div class="fg"><label class="fl">키워드</label><input type="text" id="bulk-keyword" placeholder="예: 강남 맛집 추천" /></div>
+        <div class="fg"><label class="fl">글 형식</label>
+          <select id="bulk-style">
+            <option value="info">📚 정보성 글</option>
+            <option value="review">⭐ 후기/리뷰</option>
+            <option value="listicle">📋 리스트형</option>
+            <option value="story">💬 스토리텔링</option>
+          </select>
+        </div>
+        <div class="pub-opts" style="margin-bottom:10px;">
+          <div class="pub-opt selected" id="bulk-opt-draft" onclick="selectBulkOpt('draft')"><div class="pub-opt-title">📝 초안 저장</div><div class="pub-opt-desc">검토 후 발행</div></div>
+          <div class="pub-opt" id="bulk-opt-publish" onclick="selectBulkOpt('publish')"><div class="pub-opt-title">🚀 즉시 발행</div><div class="pub-opt-desc">바로 올림</div></div>
+        </div>
+        <button class="btn btn-primary btn-full" id="bulk-btn" onclick="runBulk()">📦 대량 생성 시작</button>
+      </div>
+      <div class="card">
+        <div class="card-title">결과</div>
+        <div id="bulk-result"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">생성 결과가 여기에 표시돼요</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 포스트 목록 -->
+  <div class="page" id="page-posts">
+    <div class="page-header">
+      <div class="page-title">포스트 <span>목록</span></div>
+      <select id="filter-account" onchange="loadPosts()" style="width:auto;padding:6px 10px;"><option value="">전체 계정</option></select>
+    </div>
+    <div class="card">
+      <div id="postsTable"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">포스트가 없어요</div></div></div>
+    </div>
+  </div>
+
+  <!-- 공감 -->
+  <div class="page" id="page-like">
+    <div class="page-header"><div class="page-title">공감 <span>자동화</span></div></div>
+    <div class="card">
+      <div class="card-title">공감 설정</div>
+      <div class="fg"><label class="fl">계정 선택</label><select id="like-account"><option value="">계정을 선택하세요</option></select></div>
+      <div class="fg"><label class="fl">대상</label>
+        <div class="target-opts">
+          <div class="target-opt selected" id="like-opt-neighbor" onclick="selectTarget('like','neighbor')">👥 이웃 새글</div>
+          <div class="target-opt" id="like-opt-keyword" onclick="selectTarget('like','keyword')">🔍 키워드 검색</div>
+          <div class="target-opt" id="like-opt-both" onclick="selectTarget('like','both')">✨ 둘 다</div>
+        </div>
+      </div>
+      <div class="fg" id="like-kw-wrap" style="display:none;"><label class="fl">검색 키워드</label><input type="text" id="like-keyword" placeholder="예: 강남 맛집" /></div>
+      <div class="fg"><label class="fl">공감 개수</label><input type="number" id="like-count" value="10" min="1" max="50" /></div>
+      <button class="btn btn-primary btn-full" id="like-btn" onclick="runLike()">❤️ 공감 시작</button>
+      <div id="like-result"></div>
+    </div>
+  </div>
+
+  <!-- 댓글 -->
+  <div class="page" id="page-comment">
+    <div class="page-header"><div class="page-title">댓글 <span>자동화</span></div></div>
+    <div class="card">
+      <div class="card-title">댓글 설정</div>
+      <div class="fg"><label class="fl">계정 선택</label><select id="comment-account"><option value="">계정을 선택하세요</option></select></div>
+      <div class="fg"><label class="fl">대상</label>
+        <div class="target-opts">
+          <div class="target-opt selected" id="comment-opt-neighbor" onclick="selectTarget('comment','neighbor')">👥 이웃 새글</div>
+          <div class="target-opt" id="comment-opt-keyword" onclick="selectTarget('comment','keyword')">🔍 키워드 검색</div>
+          <div class="target-opt" id="comment-opt-both" onclick="selectTarget('comment','both')">✨ 둘 다</div>
+        </div>
+      </div>
+      <div class="fg" id="comment-kw-wrap" style="display:none;"><label class="fl">검색 키워드</label><input type="text" id="comment-keyword" placeholder="예: 강남 맛집" /></div>
+      <div class="fg"><label class="fl">댓글 수</label><input type="number" id="comment-count" value="5" min="1" max="20" /></div>
+      <div class="fg"><label class="fl">댓글 톤</label>
+        <select id="comment-tone">
+          <option value="friendly">😊 친근한 톤</option>
+          <option value="professional">💼 전문적인 톤</option>
+          <option value="casual">😎 캐주얼 톤</option>
+        </select>
+      </div>
+      <div class="fg"><label class="fl">직접 입력 댓글 (비우면 AI 자동 생성)</label><textarea id="comment-custom" placeholder="비우면 AI가 자동으로 생성해줘요" style="min-height:60px;"></textarea></div>
+      <button class="btn btn-primary btn-full" id="comment-btn" onclick="runComment()">💬 댓글 시작</button>
+      <div id="comment-result"></div>
+    </div>
+  </div>
+
+  <!-- 서로이웃 -->
+  <div class="page" id="page-neighbor">
+    <div class="page-header"><div class="page-title">서로이웃 <span>자동화</span></div></div>
+    <div class="card">
+      <div class="card-title">서로이웃 신청 설정</div>
+      <div class="fg"><label class="fl">계정 선택</label><select id="neighbor-account"><option value="">계정을 선택하세요</option></select></div>
+      <div class="fg"><label class="fl">검색 키워드</label><input type="text" id="neighbor-keyword" placeholder="예: 강남 맛집" /></div>
+      <div class="fg"><label class="fl">신청 개수</label><input type="number" id="neighbor-count" value="10" min="1" max="30" /></div>
+      <div class="fg"><label class="fl">신청 메시지</label><textarea id="neighbor-message" style="min-height:60px;">안녕하세요! 좋은 글 잘 보고 갑니다. 서로이웃 신청드려요 :)</textarea></div>
+      <button class="btn btn-primary btn-full" id="neighbor-btn" onclick="runNeighbor()">👥 서로이웃 신청</button>
+      <div id="neighbor-result"></div>
+    </div>
+  </div>
+
+  <!-- 공감+댓글 -->
+  <div class="page" id="page-engage">
+    <div class="page-header"><div class="page-title">공감+댓글 <span>동시</span></div></div>
+    <div class="card">
+      <div class="card-title">통합 설정</div>
+      <div class="fg"><label class="fl">계정 선택</label><select id="engage-account"><option value="">계정을 선택하세요</option></select></div>
+      <div class="fg"><label class="fl">대상</label>
+        <div class="target-opts">
+          <div class="target-opt selected" id="engage-opt-neighbor" onclick="selectTarget('engage','neighbor')">👥 이웃 새글</div>
+          <div class="target-opt" id="engage-opt-keyword" onclick="selectTarget('engage','keyword')">🔍 키워드 검색</div>
+          <div class="target-opt" id="engage-opt-both" onclick="selectTarget('engage','both')">✨ 둘 다</div>
+        </div>
+      </div>
+      <div class="fg" id="engage-kw-wrap" style="display:none;"><label class="fl">검색 키워드</label><input type="text" id="engage-keyword" placeholder="예: 강남 맛집" /></div>
+      <div class="col2">
+        <div class="fg"><label class="fl">공감 개수</label><input type="number" id="engage-like-count" value="10" min="1" max="50" /></div>
+        <div class="fg"><label class="fl">댓글 개수</label><input type="number" id="engage-comment-count" value="5" min="1" max="20" /></div>
+      </div>
+      <div class="fg"><label class="fl">댓글 톤</label>
+        <select id="engage-tone">
+          <option value="friendly">😊 친근한 톤</option>
+          <option value="professional">💼 전문적인 톤</option>
+          <option value="casual">😎 캐주얼 톤</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" id="engage-btn" onclick="runEngage()">⚡ 공감+댓글 시작</button>
+      <div id="engage-result"></div>
+    </div>
+  </div>
+
+
+  <!-- 자동 발행 설정 -->
+  <div class="page" id="page-schedule">
+    <div class="page-header">
+      <div class="page-title">자동 발행 <span>설정</span></div>
+      <button class="btn btn-primary" onclick="openModal('modal-schedule')">+ 스케줄 추가</button>
+    </div>
+    <div class="card">
+      <div class="card-title">등록된 자동 발행 스케줄</div>
+      <div id="scheduleTable"><div class="empty"><div class="empty-icon">⏰</div><div class="empty-text">등록된 스케줄이 없어요</div></div></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- 계정 추가 모달 -->
+<div class="modal-bg" id="modal-account">
+  <div class="modal">
+    <div class="modal-title">계정 추가</div>
+    <div class="fg"><label class="fl">고객명 / 사업체명</label><input type="text" id="acc-name" placeholder="예: 강남 카페 홍길동" /></div>
+    <div class="fg"><label class="fl">네이버 아이디</label><input type="text" id="acc-id" /></div>
+    <div class="fg"><label class="fl">네이버 비밀번호</label><input type="password" id="acc-pw" /></div>
+    <div class="fg">
+      <label class="fl">블로그 타입</label>
+      <div class="type-grid" id="acc-type-grid">
+        <div class="type-opt selected" data-type="monetize" onclick="selectBlogType(this)"><div class="type-opt-icon">💰</div><div class="type-opt-name">수익화</div></div>
+        <div class="type-opt" data-type="ads" onclick="selectBlogType(this)"><div class="type-opt-icon">📢</div><div class="type-opt-name">광고형</div></div>
+        <div class="type-opt" data-type="daily" onclick="selectBlogType(this)"><div class="type-opt-icon">📖</div><div class="type-opt-name">일상</div></div>
+        <div class="type-opt" data-type="business" onclick="selectBlogType(this)"><div class="type-opt-icon">🏪</div><div class="type-opt-name">사업체</div></div>
+        <div class="type-opt" data-type="info" onclick="selectBlogType(this)"><div class="type-opt-icon">📚</div><div class="type-opt-name">정보성</div></div>
+      </div>
+      <input type="hidden" id="acc-blog-type" value="monetize" />
+    </div>
+    <hr class="divider">
+    <div class="section-label">자동화 설정</div>
+    <div class="toggle-row"><span class="toggle-label">❤️ 공감 자동화</span><div class="toggle" id="tog-like" onclick="toggleAuto('like')"></div></div>
+    <div id="auto-like-opts" style="display:none;padding:8px 0;">
+      <div class="col2">
+        <div class="fg"><label class="fl">공감 개수/회</label><input type="number" id="auto-like-count" value="10" min="1" max="50" /></div>
+      </div>
+    </div>
+    <div class="toggle-row"><span class="toggle-label">💬 댓글 자동화</span><div class="toggle" id="tog-comment" onclick="toggleAuto('comment')"></div></div>
+    <div id="auto-comment-opts" style="display:none;padding:8px 0;">
+      <div class="fg"><label class="fl">댓글 개수/회</label><input type="number" id="auto-comment-count" value="5" min="1" max="20" /></div>
+    </div>
+    <div class="toggle-row"><span class="toggle-label">👥 서로이웃 자동화</span><div class="toggle" id="tog-neighbor" onclick="toggleAuto('neighbor')"></div></div>
+    <div id="auto-neighbor-opts" style="display:none;padding:8px 0;">
+      <div class="fg"><label class="fl">신청 개수/회</label><input type="number" id="auto-neighbor-count" value="5" min="1" max="20" /></div>
+    </div>
+    <div class="fg" style="margin-top:10px;"><label class="fl">자동화 대상</label>
+      <div class="target-opts">
+        <div class="target-opt selected" id="auto-opt-neighbor" onclick="selectAutoTarget('neighbor')">👥 이웃</div>
+        <div class="target-opt" id="auto-opt-keyword" onclick="selectAutoTarget('keyword')">🔍 키워드</div>
+        <div class="target-opt" id="auto-opt-both" onclick="selectAutoTarget('both')">✨ 둘 다</div>
+      </div>
+    </div>
+    <div class="fg" id="auto-kw-wrap" style="display:none;"><label class="fl">자동화 키워드</label><input type="text" id="auto-keyword" placeholder="예: 강남 맛집" /></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-account')">취소</button>
+      <button class="btn btn-primary" onclick="addAccount()">추가</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- 스케줄 추가 모달 -->
+<div class="modal-bg" id="modal-schedule">
+  <div class="modal">
+    <div class="modal-title">자동 발행 스케줄 추가</div>
+    <div class="fg"><label class="fl">계정 선택</label><select id="sch-account"><option value="">계정을 선택하세요</option></select></div>
+    <div class="fg">
+      <label class="fl">키워드 목록 (쉼표로 구분)</label>
+      <textarea id="sch-keywords" placeholder="강남 맛집, 서울 카페 추천, 부동산 투자 방법" style="min-height:70px;"></textarea>
+    </div>
+    <div class="fg">
+      <label class="fl">발행 시간 (여러 개 가능)</label>
+      <div id="sch-times-wrap">
+        <div class="btn-row" style="margin-bottom:6px;">
+          <input type="time" id="sch-time-input" style="flex:1;" />
+          <button class="btn btn-ghost btn-sm" onclick="addSchTime()">+ 추가</button>
+        </div>
+        <div id="sch-times-list" class="kw-tags"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">글 형식</label>
+      <select id="sch-style">
+        <option value="info">📚 정보성 글</option>
+        <option value="review">⭐ 후기/리뷰</option>
+        <option value="listicle">📋 리스트형</option>
+        <option value="story">💬 스토리텔링</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-schedule')">취소</button>
+      <button class="btn btn-primary" onclick="addSchedule()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 계정 수정 모달 -->
+<div class="modal-bg" id="modal-edit-account">
+  <div class="modal">
+    <div class="modal-title">계정 수정</div>
+    <input type="hidden" id="edit-acc-id" />
+    <div class="fg"><label class="fl">고객명 / 사업체명</label><input type="text" id="edit-acc-name" /></div>
+    <div class="fg"><label class="fl">네이버 아이디</label><input type="text" id="edit-acc-nid" /></div>
+    <div class="fg"><label class="fl">네이버 비밀번호 (변경시만 입력)</label><input type="password" id="edit-acc-pw" placeholder="변경하지 않으면 비워두세요" /></div>
+    <div class="fg">
+      <label class="fl">블로그 타입</label>
+      <div class="type-grid" id="edit-type-grid">
+        <div class="type-opt" data-type="monetize" onclick="selectEditType(this)"><div class="type-opt-icon">💰</div><div class="type-opt-name">수익화</div></div>
+        <div class="type-opt" data-type="ads" onclick="selectEditType(this)"><div class="type-opt-icon">📢</div><div class="type-opt-name">광고형</div></div>
+        <div class="type-opt" data-type="daily" onclick="selectEditType(this)"><div class="type-opt-icon">📖</div><div class="type-opt-name">일상</div></div>
+        <div class="type-opt" data-type="business" onclick="selectEditType(this)"><div class="type-opt-icon">🏪</div><div class="type-opt-name">사업체</div></div>
+        <div class="type-opt" data-type="info" onclick="selectEditType(this)"><div class="type-opt-icon">📚</div><div class="type-opt-name">정보성</div></div>
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="section-label">자동화 설정</div>
+    <div class="toggle-row"><span class="toggle-label">❤️ 공감 자동화</span><div class="toggle" id="etog-like" onclick="eToggle('like')"></div></div>
+    <div id="eopt-like" style="display:none;" class="fg"><label class="fl">공감 개수/회</label><input type="number" id="elike-count" value="10" min="1" max="50" /></div>
+    <div class="toggle-row"><span class="toggle-label">💬 댓글 자동화</span><div class="toggle" id="etog-comment" onclick="eToggle('comment')"></div></div>
+    <div id="eopt-comment" style="display:none;" class="fg"><label class="fl">댓글 개수/회</label><input type="number" id="ecomment-count" value="5" min="1" max="20" /></div>
+    <div class="toggle-row"><span class="toggle-label">👥 서로이웃 자동화</span><div class="toggle" id="etog-neighbor" onclick="eToggle('neighbor')"></div></div>
+    <div id="eopt-neighbor" style="display:none;" class="fg"><label class="fl">신청 개수/회</label><input type="number" id="eneighbor-count" value="5" min="1" max="20" /></div>
+    <div class="fg" style="margin-top:8px;"><label class="fl">자동화 대상</label>
+      <div class="target-opts">
+        <div class="target-opt selected" id="eauto-neighbor" onclick="selectETarget('neighbor')">👥 이웃</div>
+        <div class="target-opt" id="eauto-keyword" onclick="selectETarget('keyword')">🔍 키워드</div>
+        <div class="target-opt" id="eauto-both" onclick="selectETarget('both')">✨ 둘 다</div>
+      </div>
+    </div>
+    <div class="fg" id="eauto-kw-wrap" style="display:none;"><label class="fl">자동화 키워드</label><input type="text" id="eauto-keyword" /></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-account')">취소</button>
+      <button class="btn btn-primary" onclick="saveEdit()">저장</button>
+    </div>
+  </div>
+</div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+let currentPostId = null;
+let accounts = [];
+let pubOpt = 'review';
+let bulkOpt = 'draft';
+let autoTarget = 'neighbor';
+let targets = { like:'neighbor', comment:'neighbor', engage:'neighbor' };
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector('[data-page="' + name + '"]').classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'accounts') loadAccounts();
+  if (name === 'posts') loadPosts();
+  if (name === 'schedule') loadSchedules();
+  if (name === 'bulk') renderBulkAccounts();
+}
+
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type; el.textContent = msg;
+  document.getElementById('toastWrap').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// 블로그 타입 선택
+let selectedBlogType = 'monetize';
+function selectBlogType(el) {
+  document.querySelectorAll('#acc-type-grid .type-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedBlogType = el.dataset.type;
+  document.getElementById('acc-blog-type').value = selectedBlogType;
+}
+
+// 발행 옵션
+function selectPubOpt(opt) {
+  pubOpt = opt;
+  ['now','review','schedule'].forEach(o => document.getElementById('opt-' + o).classList.remove('selected'));
+  document.getElementById('opt-' + opt).classList.add('selected');
+  document.getElementById('schedule-input').style.display = opt === 'schedule' ? 'block' : 'none';
+}
+
+function selectBulkOpt(opt) {
+  bulkOpt = opt;
+  ['draft','publish'].forEach(o => document.getElementById('bulk-opt-' + o).classList.remove('selected'));
+  document.getElementById('bulk-opt-' + opt).classList.add('selected');
+}
+
+// 타겟 선택
+function selectTarget(page, t) {
+  targets[page] = t;
+  ['neighbor','keyword','both'].forEach(o => document.getElementById(page + '-opt-' + o).classList.remove('selected'));
+  document.getElementById(page + '-opt-' + t).classList.add('selected');
+  const kwWrap = document.getElementById(page + '-kw-wrap');
+  if (kwWrap) kwWrap.style.display = (t === 'keyword' || t === 'both') ? 'block' : 'none';
+}
+
+// 자동화 토글
+let autoToggles = { like: false, comment: false, neighbor: false };
+function toggleAuto(type) {
+  autoToggles[type] = !autoToggles[type];
+  const tog = document.getElementById('tog-' + type);
+  tog.classList.toggle('on', autoToggles[type]);
+  document.getElementById('auto-' + type + '-opts').style.display = autoToggles[type] ? 'block' : 'none';
+}
+
+function selectAutoTarget(t) {
+  autoTarget = t;
+  ['neighbor','keyword','both'].forEach(o => document.getElementById('auto-opt-' + o).classList.remove('selected'));
+  document.getElementById('auto-opt-' + t).classList.add('selected');
+  document.getElementById('auto-kw-wrap').style.display = (t === 'keyword' || t === 'both') ? 'block' : 'none';
+}
+
+// 계정 로드
+async function loadAccountsData() {
+  const res = await fetch('/api/accounts');
+  accounts = await res.json();
+  const side = document.getElementById('sideAccounts');
+  side.innerHTML = accounts.length === 0
+    ? '<div style="font-size:11px;color:#444;padding:4px;">등록된 계정 없음</div>'
+    : accounts.map(a => `<div class="acc-chip" onclick="filterByAccount(${a.id})"><div class="acc-dot"></div><span>${a.client_name}</span></div>`).join('');
+  const selects = ['gen-account','filter-account','like-account','comment-account','neighbor-account','engage-account'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const first = el.options[0];
+    el.innerHTML = ''; el.appendChild(first);
+    accounts.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id; opt.textContent = a.client_name + ' (' + a.naver_id + ')';
+      el.appendChild(opt);
+    });
+  });
+}
+
+function renderBulkAccounts() {
+  const el = document.getElementById('bulk-accounts');
+  if (!el) return;
+  el.innerHTML = accounts.map(a => `
+    <label style="display:flex;flex-direction:row;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer;">
+      <input type="checkbox" value="${a.id}" style="width:auto;"> ${a.client_name} (${a.naver_id})
+    </label>`).join('');
+}
+
+async function loadAccounts() {
+  await loadAccountsData();
+  const el = document.getElementById('accountsTable');
+  if (!accounts.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div>'; return; }
+  const typeNames = { monetize:'💰 수익화', ads:'📢 광고형', daily:'📖 일상', business:'🏪 사업체', info:'📚 정보성' };
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>블로그 타입</th><th>키워드</th><th>자동화</th><th>액션</th></tr></thead><tbody>'
+    + accounts.map(a => `<tr>
+      <td><strong>${a.client_name}</strong></td>
+      <td style="font-family:monospace;">${a.naver_id}</td>
+      <td>${typeNames[a.blog_type] || a.blog_type}</td>
+      <td style="font-size:11px;">${a.auto_like?'❤️':''} ${a.auto_comment?'💬':''} ${a.auto_neighbor?'👥':''}</td>
+      <td style="color:var(--dim);">${(a.created_at||'').slice(0,10)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">삭제</button></td>
+    </tr>`).join('')
+    + '</tbody></table></div>';
+}
+
+async function addAccount() {
+  const name = document.getElementById('acc-name').value.trim();
+  const id = document.getElementById('acc-id').value.trim();
+  const pw = document.getElementById('acc-pw').value.trim();
+  if (!name || !id || !pw) { toast('모든 항목을 입력해주세요', 'error'); return; }
+  await fetch('/api/accounts', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      client_name:name, naver_id:id, naver_pw:pw,
+      blog_type: selectedBlogType,
+      auto_like: autoToggles.like ? 1 : 0,
+      auto_comment: autoToggles.comment ? 1 : 0,
+      auto_neighbor: autoToggles.neighbor ? 1 : 0,
+      auto_like_count: parseInt(document.getElementById('auto-like-count').value)||10,
+      auto_comment_count: parseInt(document.getElementById('auto-comment-count').value)||5,
+      auto_neighbor_count: parseInt(document.getElementById('auto-neighbor-count').value)||5,
+      auto_target: autoTarget,
+      auto_keyword: document.getElementById('auto-keyword').value
+    })});
+  toast('계정 추가됨', 'success');
+  closeModal('modal-account');
+  await loadAccountsData(); loadAccounts();
+}
+
+async function deleteAccount(id) {
+  if (!confirm('삭제할까요?')) return;
+  await fetch('/api/accounts/' + id, {method:'DELETE'});
+  toast('삭제됨', 'success');
+  await loadAccountsData(); loadAccounts();
+}
+
+// 키워드 추천
+async function suggestKeywords() {
+  const topic = document.getElementById('gen-keyword').value.trim();
+  const accountId = document.getElementById('gen-account').value;
+  if (!topic) { toast('키워드 힌트를 먼저 입력해줘!', 'error'); return; }
+  const account = accounts.find(a => a.id == accountId);
+  const blogType = account ? account.blog_type : 'info';
+  const container = document.getElementById('kw-suggestions');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({topic, blog_type: blogType, count: 6})});
+    const data = await res.json();
+    if (data.success) {
+      container.innerHTML = data.keywords.map(kw => `<div class="kw-tag" onclick="selectKeyword('${kw}')">${kw}</div>`).join('');
+    }
+  } catch(e) { toast('추천 실패', 'error'); container.innerHTML = ''; }
+}
+
+function selectKeyword(kw) {
+  document.getElementById('gen-keyword').value = kw;
+  document.getElementById('kw-suggestions').innerHTML = '';
+}
+
+// 글 생성
+async function generatePost() {
+  const accountId = document.getElementById('gen-account').value;
+  const keyword = document.getElementById('gen-keyword').value.trim();
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  if (!keyword) { toast('키워드를 입력해주세요', 'error'); return; }
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 생성 중...';
+  // 이미지 처리
+  let image_base64 = '';
+  let image_type = 'image/jpeg';
+  const imgFile = document.getElementById('gen-image').files[0];
+  if (imgFile) {
+    image_base64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(imgFile);
+    });
+    image_type = imgFile.type;
+  }
+
+  const payload = { account_id: accountId, keyword,
+    post_style: document.getElementById('gen-style').value,
+    custom_prompt: document.getElementById('gen-prompt').value,
+    cta_link: document.getElementById('gen-cta-link').value,
+    cta_text: document.getElementById('gen-cta-text').value,
+    cpa_link: document.getElementById('gen-cpa-link').value,
+    cps_link: document.getElementById('gen-cps-link').value,
+    place_name: document.getElementById('gen-place').value,
+    word_count: parseInt(document.getElementById('gen-wordcount').value),
+    image_count: parseInt(document.getElementById('gen-imgcount').value),
+    image_base64, image_type };
+  if (pubOpt === 'schedule') payload.scheduled_at = document.getElementById('gen-scheduled-at').value;
+  try {
+    const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const data = await res.json();
+    if (data.success) {
+      currentPostId = data.post_id;
+      document.getElementById('preview-title').value = data.title;
+      document.getElementById('preview-body').value = data.body;
+      const imgWrap = document.getElementById('preview-images');
+      imgWrap.innerHTML = (data.images && data.images.length) ? data.images.map(url => `<img src="${url}" class="img-thumb" />`).join('') : '';
+      document.getElementById('preview-empty').style.display = 'none';
+      document.getElementById('preview-content').style.display = 'block';
+      toast('글 생성 완료!', 'success');
+      if (pubOpt === 'now') { await publishPost(); return; }
+      if (pubOpt === 'schedule') { toast('예약 발행으로 저장됐어요 ⏰', 'info'); }
+    } else { toast('실패: ' + data.message, 'error'); }
+  } catch(e) { toast('오류 발생', 'error'); }
+  btn.disabled = false; btn.innerHTML = '✨ AI 글 생성';
+}
+
+async function publishPost() {
+  if (!currentPostId) return;
+  await fetch('/api/posts/' + currentPostId, {method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({title: document.getElementById('preview-title').value, body: document.getElementById('preview-body').value})});
+  const btn = document.getElementById('pub-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 발행 중...';
+  try {
+    const res = await fetch('/api/publish/' + currentPostId, {method:'POST'});
+    const data = await res.json();
+    if (data.success) { toast('발행 완료! 🎉', 'success'); discardPost(); loadDashboard(); }
+    else { toast('발행 실패: ' + data.message, 'error'); }
+  } catch(e) { toast('오류', 'error'); }
+  btn.disabled = false; btn.innerHTML = '🚀 네이버 발행';
+}
+
+async function saveOnly() {
+  if (!currentPostId) return;
+  await fetch('/api/posts/' + currentPostId, {method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({title: document.getElementById('preview-title').value, body: document.getElementById('preview-body').value})});
+  toast('저장됐어요', 'success');
+}
+
+function discardPost() {
+  currentPostId = null;
+  document.getElementById('preview-empty').style.display = 'block';
+  document.getElementById('preview-content').style.display = 'none';
+}
+
+// 대량 발행
+async function runBulk() {
+  const checkboxes = document.querySelectorAll('#bulk-accounts input[type=checkbox]:checked');
+  const accountIds = Array.from(checkboxes).map(c => parseInt(c.value));
+  const keyword = document.getElementById('bulk-keyword').value.trim();
+  if (!accountIds.length) { toast('계정을 선택해주세요', 'error'); return; }
+  if (!keyword) { toast('키워드를 입력해주세요', 'error'); return; }
+  const btn = document.getElementById('bulk-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 생성 중...';
+  try {
+    const res = await fetch('/api/bulk_generate', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account_ids: accountIds, keyword, post_style: document.getElementById('bulk-style').value})});
+    const data = await res.json();
+    const el = document.getElementById('bulk-result');
+    el.innerHTML = data.results.map(r => `
+      <div class="result-box ${r.success ? 'result-ok' : 'result-err'}" style="margin-bottom:6px;">
+        ${r.success ? '✅' : '❌'} ${r.account} - ${r.success ? r.title : r.message}
+        ${r.success && bulkOpt === 'publish' ? `<button class="btn btn-blue btn-sm" style="margin-left:8px;" onclick="publishDraft(${r.post_id})">발행</button>` : ''}
+      </div>`).join('');
+    toast(`${data.results.filter(r=>r.success).length}개 생성 완료!`, 'success');
+  } catch(e) { toast('오류', 'error'); }
+  btn.disabled = false; btn.innerHTML = '📦 대량 생성 시작';
+}
+
+// 포스트 목록
+async function loadPosts() {
+  const accountId = document.getElementById('filter-account').value;
+  const res = await fetch('/api/posts' + (accountId ? '?account_id=' + accountId : ''));
+  const posts = await res.json();
+  const el = document.getElementById('postsTable');
+  if (!posts.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">포스트가 없어요</div></div>'; return; }
+  const sb = s => s==='published'?'<span class="badge bg">발행됨</span>':s==='scheduled'?'<span class="badge bb">예약됨</span>':'<span class="badge by">초안</span>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>계정</th><th>키워드</th><th>제목</th><th>타입</th><th>상태</th><th>날짜</th><th>액션</th></tr></thead><tbody>'
+    + posts.map(p => `<tr><td>${p.client_name}</td><td><span style="background:var(--s2);padding:2px 6px;border-radius:4px;">${p.keyword}</span></td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;">${p.title}</td>
+      <td style="color:var(--dim);">${p.blog_type||'info'}</td><td>${sb(p.status)}</td>
+      <td style="color:var(--dim);">${(p.created_at||'').slice(0,10)}</td>
+      <td><div class="btn-row">${p.status!=='published'?`<button class="btn btn-blue btn-sm" onclick="publishDraft(${p.id})">발행</button>`:''}
+      ${p.published_url?`<a href="${p.published_url}" target="_blank" class="btn btn-ghost btn-sm">보기</a>`:''}
+      <button class="btn btn-danger btn-sm" onclick="deletePost(${p.id})">삭제</button></div></td></tr>`).join('')
+    + '</tbody></table></div>';
+}
+
+async function publishDraft(pid) {
+  const res = await fetch('/api/publish/' + pid, {method:'POST'});
+  const data = await res.json();
+  if (data.success) { toast('발행 완료!', 'success'); loadPosts(); }
+  else { toast('실패: ' + data.message, 'error'); }
+}
+
+async function deletePost(id) {
+  if (!confirm('삭제할까요?')) return;
+  await fetch('/api/posts/' + id, {method:'DELETE'});
+  toast('삭제됨', 'success'); loadPosts();
+}
+
+function filterByAccount(id) {
+  showPage('posts');
+  document.getElementById('filter-account').value = id;
+  loadPosts();
+}
+
+// 인게이저
+async function runAction(page, endpoint, payload) {
+  const btn = document.getElementById(page + '-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 진행 중...';
+  try {
+    const res = await fetch('/api/engage/' + endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const data = await res.json();
+    document.getElementById(page + '-result').innerHTML =
+      `<div class="result-box ${data.success ? 'result-ok' : 'result-err'}">${data.success ? '✅' : '❌'} ${data.message}</div>`;
+  } catch(e) { document.getElementById(page + '-result').innerHTML = '<div class="result-box result-err">❌ 오류 발생</div>'; }
+  btn.disabled = false;
+}
+
+async function runLike() {
+  const accountId = document.getElementById('like-account').value;
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  const t = targets.like;
+  document.getElementById('like-btn').innerHTML = '<span class="spinner"></span> 진행 중...';
+  document.getElementById('like-btn').disabled = true;
+
+  if (t === 'both') {
+    const r1 = await fetch('/api/engage/like', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account_id:accountId, target:'neighbor', count:Math.ceil(parseInt(document.getElementById('like-count').value)/2)})});
+    const r2 = await fetch('/api/engage/like', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account_id:accountId, target:'keyword', keyword:document.getElementById('like-keyword').value, count:Math.floor(parseInt(document.getElementById('like-count').value)/2)})});
+    const d1 = await r1.json(); const d2 = await r2.json();
+    document.getElementById('like-result').innerHTML = `<div class="result-box result-ok">✅ 이웃: ${d1.liked||0}개 + 키워드: ${d2.liked||0}개 완료</div>`;
+  } else {
+    await runAction('like', 'like', {account_id:accountId, target:t,
+      keyword:document.getElementById('like-keyword').value,
+      count:parseInt(document.getElementById('like-count').value)});
+  }
+  document.getElementById('like-btn').disabled = false;
+  document.getElementById('like-btn').innerHTML = '❤️ 공감 시작';
+}
+
+async function runComment() {
+  const accountId = document.getElementById('comment-account').value;
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  await runAction('comment', 'comment', {account_id:accountId, target:targets.comment,
+    keyword:document.getElementById('comment-keyword').value,
+    count:parseInt(document.getElementById('comment-count').value),
+    tone:document.getElementById('comment-tone').value,
+    custom_comment:document.getElementById('comment-custom').value});
+  document.getElementById('comment-btn').innerHTML = '💬 댓글 시작';
+}
+
+async function runNeighbor() {
+  const accountId = document.getElementById('neighbor-account').value;
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  await runAction('neighbor', 'neighbor', {account_id:accountId,
+    keyword:document.getElementById('neighbor-keyword').value,
+    count:parseInt(document.getElementById('neighbor-count').value),
+    message:document.getElementById('neighbor-message').value});
+  document.getElementById('neighbor-btn').innerHTML = '👥 서로이웃 신청';
+}
+
+async function runEngage() {
+  const accountId = document.getElementById('engage-account').value;
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  await runAction('engage', 'engage', {account_id:accountId, target:targets.engage,
+    keyword:document.getElementById('engage-keyword').value,
+    like_count:parseInt(document.getElementById('engage-like-count').value),
+    comment_count:parseInt(document.getElementById('engage-comment-count').value),
+    tone:document.getElementById('engage-tone').value});
+  document.getElementById('engage-btn').innerHTML = '⚡ 공감+댓글 시작';
+}
+
+// 대시보드
+async function loadDashboard() {
+  await loadAccountsData();
+  const res = await fetch('/api/posts');
+  const posts = await res.json();
+  document.getElementById('s-accounts').textContent = accounts.length;
+  document.getElementById('s-total').textContent = posts.length;
+  document.getElementById('s-published').textContent = posts.filter(p=>p.status==='published').length;
+  document.getElementById('s-scheduled').textContent = posts.filter(p=>p.status==='scheduled').length;
+  const el = document.getElementById('recentPosts');
+  const recent = posts.slice(0,8);
+  if (!recent.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📝</div><div class="empty-text">아직 포스트가 없어요</div></div>'; return; }
+  const sb = s => s==='published'?'<span class="badge bg">발행됨</span>':s==='scheduled'?'<span class="badge bb">예약됨</span>':'<span class="badge by">초안</span>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>계정</th><th>키워드</th><th>제목</th><th>상태</th><th>날짜</th></tr></thead><tbody>'
+    + recent.map(p=>`<tr><td>${p.client_name}</td><td><span style="background:var(--s2);padding:2px 6px;border-radius:4px;">${p.keyword}</span></td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">${p.title}</td>
+      <td>${sb(p.status)}</td><td style="color:var(--dim);">${(p.created_at||'').slice(0,10)}</td></tr>`).join('')
+    + '</tbody></table></div>';
+}
+
+
+// 스케줄 관리
+let schTimes = [];
+
+function addSchTime() {
+  const t = document.getElementById('sch-time-input').value;
+  if (!t) return;
+  if (schTimes.includes(t)) { toast('이미 추가된 시간이에요', 'error'); return; }
+  schTimes.push(t);
+  renderSchTimes();
+}
+
+function removeSchTime(t) {
+  schTimes = schTimes.filter(x => x !== t);
+  renderSchTimes();
+}
+
+function renderSchTimes() {
+  document.getElementById('sch-times-list').innerHTML = schTimes.map(t =>
+    `<div class="kw-tag" onclick="removeSchTime('${t}')">${t} ✕</div>`
+  ).join('');
+}
+
+async function addSchedule() {
+  const accountId = document.getElementById('sch-account').value;
+  const keywordsRaw = document.getElementById('sch-keywords').value.trim();
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  if (!keywordsRaw) { toast('키워드를 입력해주세요', 'error'); return; }
+  if (!schTimes.length) { toast('발행 시간을 추가해주세요', 'error'); return; }
+  const keywords = keywordsRaw.split(',').map(k => k.trim()).filter(k => k);
+  await fetch('/api/schedule', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({account_id: accountId, keywords, post_times: schTimes, post_style: document.getElementById('sch-style').value})});
+  toast('스케줄 추가됨!', 'success');
+  closeModal('modal-schedule');
+  schTimes = [];
+  renderSchTimes();
+  loadSchedules();
+}
+
+async function loadSchedules() {
+  // 계정 셀렉트 업데이트
+  const el = document.getElementById('sch-account');
+  if (el) {
+    const first = el.options[0];
+    el.innerHTML = ''; el.appendChild(first);
+    accounts.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id; opt.textContent = a.client_name + ' (' + a.naver_id + ')';
+      el.appendChild(opt);
+    });
+  }
+
+  const res = await fetch('/api/schedule');
+  const schedules = await res.json();
+  const tbl = document.getElementById('scheduleTable');
+  if (!tbl) return;
+  if (!schedules.length) {
+    tbl.innerHTML = '<div class="empty"><div class="empty-icon">⏰</div><div class="empty-text">등록된 스케줄이 없어요</div></div>';
+    return;
+  }
+  tbl.innerHTML = '<div class="table-wrap"><table><thead><tr><th>계정</th><th>키워드</th><th>발행 시간</th><th>글 형식</th><th>상태</th><th>액션</th></tr></thead><tbody>'
+    + schedules.map(s => {
+        const kws = JSON.parse(s.keywords||'[]');
+        const times = JSON.parse(s.post_times||'[]');
+        return `<tr>
+          <td>${s.client_name}</td>
+          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;">${kws.join(', ')}</td>
+          <td>${times.join(', ')}</td>
+          <td>${s.post_style}</td>
+          <td><span class="badge ${s.is_active?'bg':'by'}">${s.is_active?'활성':'비활성'}</span></td>
+          <td><div class="btn-row">
+            <button class="btn btn-ghost btn-sm" onclick="toggleSchedule(${s.id}, ${s.is_active})">${s.is_active?'끄기':'켜기'}</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSchedule(${s.id})">삭제</button>
+          </div></td>
+        </tr>`;
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+async function toggleSchedule(id, current) {
+  const res = await fetch('/api/schedule/' + id);
+  // 현재 데이터 가져오기
+  const schedules = await (await fetch('/api/schedule')).json();
+  const s = schedules.find(x => x.id === id);
+  if (!s) return;
+  await fetch('/api/schedule/' + id, {method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({...s, is_active: current ? 0 : 1})});
+  toast(current ? '스케줄 비활성화' : '스케줄 활성화', 'success');
+  loadSchedules();
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('삭제할까요?')) return;
+  await fetch('/api/schedule/' + id, {method:'DELETE'});
+  toast('삭제됨', 'success');
+  loadSchedules();
+}
+
+
+// 계정 수정
+let eBlogType = 'info';
+let eToggles = {like:false, comment:false, neighbor:false};
+let eTarget = 'neighbor';
+
+function selectEditType(el) {
+  document.querySelectorAll('#edit-type-grid .type-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  eBlogType = el.dataset.type;
+}
+
+function eToggle(t) {
+  eToggles[t] = !eToggles[t];
+  document.getElementById('etog-' + t).classList.toggle('on', eToggles[t]);
+  document.getElementById('eopt-' + t).style.display = eToggles[t] ? 'block' : 'none';
+}
+
+function selectETarget(t) {
+  eTarget = t;
+  ['neighbor','keyword','both'].forEach(o => document.getElementById('eauto-' + o).classList.remove('selected'));
+  document.getElementById('eauto-' + t).classList.add('selected');
+  document.getElementById('eauto-kw-wrap').style.display = (t==='keyword'||t==='both') ? 'block' : 'none';
+}
+
+function openEditAccount(id) {
+  const acc = accounts.find(a => a.id == id);
+  if (!acc) return;
+  document.getElementById('edit-acc-id').value = acc.id;
+  document.getElementById('edit-acc-name').value = acc.client_name;
+  document.getElementById('edit-acc-nid').value = acc.naver_id;
+  document.getElementById('edit-acc-pw').value = '';
+  eBlogType = acc.blog_type || 'info';
+  document.querySelectorAll('#edit-type-grid .type-opt').forEach(o => o.classList.toggle('selected', o.dataset.type === eBlogType));
+  eToggles = {like:!!acc.auto_like, comment:!!acc.auto_comment, neighbor:!!acc.auto_neighbor};
+  ['like','comment','neighbor'].forEach(t => {
+    document.getElementById('etog-' + t).classList.toggle('on', eToggles[t]);
+    document.getElementById('eopt-' + t).style.display = eToggles[t] ? 'block' : 'none';
+  });
+  document.getElementById('elike-count').value = acc.auto_like_count || 10;
+  document.getElementById('ecomment-count').value = acc.auto_comment_count || 5;
+  document.getElementById('eneighbor-count').value = acc.auto_neighbor_count || 5;
+  eTarget = acc.auto_target || 'neighbor';
+  ['neighbor','keyword','both'].forEach(o => document.getElementById('eauto-' + o).classList.remove('selected'));
+  document.getElementById('eauto-' + eTarget).classList.add('selected');
+  document.getElementById('eauto-kw-wrap').style.display = (eTarget==='keyword'||eTarget==='both') ? 'block' : 'none';
+  document.getElementById('eauto-keyword').value = acc.auto_keyword || '';
+  // 키워드 목록 로드
+  try { editKws = JSON.parse(acc.keywords || '[]'); } catch(e) { editKws = []; }
+  renderEditKws();
+  openModal('modal-edit-account');
+}
+
+async function saveEdit() {
+  const id = document.getElementById('edit-acc-id').value;
+  const name = document.getElementById('edit-acc-name').value.trim();
+  const nid = document.getElementById('edit-acc-nid').value.trim();
+  const pw = document.getElementById('edit-acc-pw').value.trim();
+  if (!name || !nid) { toast('이름과 아이디는 필수예요', 'error'); return; }
+  const payload = {
+    client_name: name, naver_id: nid, blog_type: eBlogType,
+    auto_like: eToggles.like?1:0, auto_comment: eToggles.comment?1:0, auto_neighbor: eToggles.neighbor?1:0,
+    auto_like_count: parseInt(document.getElementById('elike-count').value)||10,
+    auto_comment_count: parseInt(document.getElementById('ecomment-count').value)||5,
+    auto_neighbor_count: parseInt(document.getElementById('eneighbor-count').value)||5,
+    auto_target: eTarget, auto_keyword: document.getElementById('eauto-keyword').value
+  };
+  if (pw) payload.naver_pw = pw;
+  payload.keywords = editKws;
+  if (pw) payload.naver_pw = pw;
+  await fetch('/api/accounts/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  toast('저장됐어요!', 'success');
+  closeModal('modal-edit-account');
+  await loadAccountsData(); loadAccounts();
+}
+
+function previewUploadedImage() {
+  const file = document.getElementById('gen-image').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('uploaded-preview').innerHTML =
+      `<img src="${e.target.result}" style="max-width:100%;max-height:120px;border-radius:6px;border:1px solid var(--border);" />
+       <div style="font-size:11px;color:var(--dim);margin-top:4px;">✅ ${file.name} - AI가 이미지를 인식해서 글에 반영해요</div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+
+// 계정 추가 모달 키워드
+let accKws = [];
+let editKws = [];
+
+function addAccKw() {
+  const input = document.getElementById('acc-kw-input');
+  const kw = input.value.trim();
+  if (!kw) return;
+  if (!accKws.includes(kw)) { accKws.push(kw); renderAccKws(); }
+  input.value = '';
+}
+
+function removeAccKw(kw) {
+  accKws = accKws.filter(k => k !== kw);
+  renderAccKws();
+}
+
+function renderAccKws() {
+  document.getElementById('acc-kw-list').innerHTML = accKws.map(kw =>
+    `<div class="kw-tag" onclick="removeAccKw('${kw}')">${kw} ✕</div>`
+  ).join('');
+}
+
+async function autoSuggestAccKw() {
+  const blogType = selectedBlogType || 'info';
+  const clientName = document.getElementById('acc-name').value.trim();
+  if (!clientName) { toast('고객명을 먼저 입력해줘!', 'error'); return; }
+  const container = document.getElementById('acc-kw-list');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({topic: clientName, blog_type: blogType, count: 8})});
+    const data = await res.json();
+    if (data.success) {
+      accKws = [...new Set([...accKws, ...data.keywords])];
+      renderAccKws();
+      toast('키워드 추천됐어요!', 'success');
+    }
+  } catch(e) { toast('추천 실패', 'error'); renderAccKws(); }
+}
+
+// 계정 수정 모달 키워드
+function addEditKw() {
+  const input = document.getElementById('edit-kw-input');
+  const kw = input.value.trim();
+  if (!kw) return;
+  if (!editKws.includes(kw)) { editKws.push(kw); renderEditKws(); }
+  input.value = '';
+}
+
+function removeEditKw(kw) {
+  editKws = editKws.filter(k => k !== kw);
+  renderEditKws();
+}
+
+function renderEditKws() {
+  document.getElementById('edit-kw-list').innerHTML = editKws.map(kw =>
+    `<div class="kw-tag" onclick="removeEditKw('${kw}')">${kw} ✕</div>`
+  ).join('');
+}
+
+async function autoSuggestEditKw() {
+  const blogType = eBlogType || 'info';
+  const clientName = document.getElementById('edit-acc-name').value.trim();
+  if (!clientName) { toast('고객명을 먼저 입력해줘!', 'error'); return; }
+  const container = document.getElementById('edit-kw-list');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({topic: clientName, blog_type: blogType, count: 8})});
+    const data = await res.json();
+    if (data.success) {
+      editKws = [...new Set([...editKws, ...data.keywords])];
+      renderEditKws();
+      toast('키워드 추천됐어요!', 'success');
+    }
+  } catch(e) { toast('추천 실패', 'error'); renderEditKws(); }
+}
+
+loadAccountsData(); loadDashboard();
+</script>
+</body>
+</html>
