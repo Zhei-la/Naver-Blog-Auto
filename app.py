@@ -46,6 +46,15 @@ def init_db():
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         published_at TEXT
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS auto_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL,
+        keywords TEXT DEFAULT '[]',
+        post_times TEXT DEFAULT '[]',
+        post_style TEXT DEFAULT 'info',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
     conn.commit()
     conn.close()
 
@@ -303,6 +312,38 @@ def engage_all():
                                d.get('like_count',10), d.get('comment_count',5), d.get('tone','friendly')))
 
 # ── 자동화 스케줄러 ──
+def run_auto_posts():
+    """자동 글 발행 - 매분 체크해서 시간 맞으면 발행"""
+    import json as _json
+    now_time = datetime.now().strftime("%H:%M")
+    conn = get_db()
+    schedules = conn.execute('''SELECT s.*, a.naver_id, a.naver_pw, a.blog_type 
+                               FROM auto_schedule s JOIN accounts a ON s.account_id=a.id
+                               WHERE s.is_active=1''').fetchall()
+    conn.close()
+    for s in schedules:
+        times = _json.loads(s["post_times"] or "[]")
+        if now_time not in times:
+            continue
+        keywords = _json.loads(s["keywords"] or "[]")
+        if not keywords:
+            continue
+        import random as _random
+        keyword = _random.choice(keywords)
+        try:
+            result = generate_post(keyword=keyword, blog_type=s["blog_type"], post_style=s["post_style"])
+            conn2 = get_db()
+            cursor = conn2.execute('''INSERT INTO posts (account_id, keyword, title, body, images, blog_type, post_style, status)
+                               VALUES (?,?,?,?,?,?,?,?)''',
+                (s["account_id"], keyword, result["title"], result["body"],
+                 _json.dumps(result["images"]), s["blog_type"], s["post_style"], "draft"))
+            post_id = cursor.lastrowid
+            conn2.commit()
+            conn2.close()
+            publish_post(s["naver_id"], s["naver_pw"], result["title"], result["body"])
+        except Exception as e:
+            print(f"자동 발행 오류: {e}")
+
 def run_auto_tasks():
     conn = get_db()
     accounts = conn.execute('SELECT * FROM accounts').fetchall()
@@ -340,7 +381,51 @@ if __name__ == '__main__':
     init_db()
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_scheduled_posts, 'interval', minutes=1)
+    scheduler.add_job(run_auto_posts, 'interval', minutes=1)
     scheduler.add_job(run_auto_tasks, 'cron', hour=9, minute=0)  # 매일 오전 9시
     scheduler.start()
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+# ── 자동 글 발행 스케줄 API ──
+@app.route('/api/schedule', methods=['GET'])
+def get_schedules():
+    aid = request.args.get('account_id')
+    conn = get_db()
+    if aid:
+        rows = conn.execute('SELECT * FROM auto_schedule WHERE account_id=?', (aid,)).fetchall()
+    else:
+        rows = conn.execute('SELECT s.*, a.client_name FROM auto_schedule s JOIN accounts a ON s.account_id=a.id').fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/schedule', methods=['POST'])
+def add_schedule():
+    d = request.json
+    conn = get_db()
+    conn.execute('''INSERT INTO auto_schedule (account_id, keywords, post_times, post_style, is_active)
+                    VALUES (?,?,?,?,?)''',
+        (d['account_id'], json.dumps(d.get('keywords',[])),
+         json.dumps(d.get('post_times',[])), d.get('post_style','info'), 1))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/schedule/<int:sid>', methods=['PUT'])
+def update_schedule(sid):
+    d = request.json
+    conn = get_db()
+    conn.execute('''UPDATE auto_schedule SET keywords=?, post_times=?, post_style=?, is_active=? WHERE id=?''',
+        (json.dumps(d.get('keywords',[])), json.dumps(d.get('post_times',[])),
+         d.get('post_style','info'), d.get('is_active',1), sid))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/schedule/<int:sid>', methods=['DELETE'])
+def delete_schedule(sid):
+    conn = get_db()
+    conn.execute('DELETE FROM auto_schedule WHERE id=?', (sid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})

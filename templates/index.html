@@ -190,6 +190,7 @@ tr:hover td { background:var(--s2); }
     <div class="nav-section">글 작성</div>
     <div class="nav-item" onclick="showPage('generate')" data-page="generate">✍️ 글 생성</div>
     <div class="nav-item" onclick="showPage('bulk')" data-page="bulk">📦 대량 발행</div>
+    <div class="nav-item" onclick="showPage('schedule')" data-page="schedule">⏰ 자동 발행 설정</div>
     <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
     <div class="nav-section">마케팅 자동화</div>
     <div class="nav-item" onclick="showPage('like')" data-page="like">❤️ 공감</div>
@@ -428,6 +429,18 @@ tr:hover td { background:var(--s2); }
     </div>
   </div>
 
+
+  <!-- 자동 발행 설정 -->
+  <div class="page" id="page-schedule">
+    <div class="page-header">
+      <div class="page-title">자동 발행 <span>설정</span></div>
+      <button class="btn btn-primary" onclick="openModal('modal-schedule')">+ 스케줄 추가</button>
+    </div>
+    <div class="card">
+      <div class="card-title">등록된 자동 발행 스케줄</div>
+      <div id="scheduleTable"><div class="empty"><div class="empty-icon">⏰</div><div class="empty-text">등록된 스케줄이 없어요</div></div></div>
+    </div>
+  </div>
 </main>
 </div>
 
@@ -480,6 +493,81 @@ tr:hover td { background:var(--s2); }
   </div>
 </div>
 
+
+<!-- 스케줄 추가 모달 -->
+<div class="modal-bg" id="modal-schedule">
+  <div class="modal">
+    <div class="modal-title">자동 발행 스케줄 추가</div>
+    <div class="fg"><label class="fl">계정 선택</label><select id="sch-account"><option value="">계정을 선택하세요</option></select></div>
+    <div class="fg">
+      <label class="fl">키워드 목록 (쉼표로 구분)</label>
+      <textarea id="sch-keywords" placeholder="강남 맛집, 서울 카페 추천, 부동산 투자 방법" style="min-height:70px;"></textarea>
+    </div>
+    <div class="fg">
+      <label class="fl">발행 시간 (여러 개 가능)</label>
+      <div id="sch-times-wrap">
+        <div class="btn-row" style="margin-bottom:6px;">
+          <input type="time" id="sch-time-input" style="flex:1;" />
+          <button class="btn btn-ghost btn-sm" onclick="addSchTime()">+ 추가</button>
+        </div>
+        <div id="sch-times-list" class="kw-tags"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">글 형식</label>
+      <select id="sch-style">
+        <option value="info">📚 정보성 글</option>
+        <option value="review">⭐ 후기/리뷰</option>
+        <option value="listicle">📋 리스트형</option>
+        <option value="story">💬 스토리텔링</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-schedule')">취소</button>
+      <button class="btn btn-primary" onclick="addSchedule()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 계정 수정 모달 -->
+<div class="modal-bg" id="modal-edit-account">
+  <div class="modal">
+    <div class="modal-title">계정 수정</div>
+    <input type="hidden" id="edit-acc-id" />
+    <div class="fg"><label class="fl">고객명 / 사업체명</label><input type="text" id="edit-acc-name" /></div>
+    <div class="fg"><label class="fl">네이버 아이디</label><input type="text" id="edit-acc-nid" /></div>
+    <div class="fg"><label class="fl">네이버 비밀번호 (변경시만 입력)</label><input type="password" id="edit-acc-pw" placeholder="변경하지 않으면 비워두세요" /></div>
+    <div class="fg">
+      <label class="fl">블로그 타입</label>
+      <div class="type-grid" id="edit-type-grid">
+        <div class="type-opt" data-type="monetize" onclick="selectEditType(this)"><div class="type-opt-icon">💰</div><div class="type-opt-name">수익화</div></div>
+        <div class="type-opt" data-type="ads" onclick="selectEditType(this)"><div class="type-opt-icon">📢</div><div class="type-opt-name">광고형</div></div>
+        <div class="type-opt" data-type="daily" onclick="selectEditType(this)"><div class="type-opt-icon">📖</div><div class="type-opt-name">일상</div></div>
+        <div class="type-opt" data-type="business" onclick="selectEditType(this)"><div class="type-opt-icon">🏪</div><div class="type-opt-name">사업체</div></div>
+        <div class="type-opt" data-type="info" onclick="selectEditType(this)"><div class="type-opt-icon">📚</div><div class="type-opt-name">정보성</div></div>
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="section-label">자동화 설정</div>
+    <div class="toggle-row"><span class="toggle-label">❤️ 공감 자동화</span><div class="toggle" id="etog-like" onclick="eToggle('like')"></div></div>
+    <div id="eopt-like" style="display:none;" class="fg"><label class="fl">공감 개수/회</label><input type="number" id="elike-count" value="10" min="1" max="50" /></div>
+    <div class="toggle-row"><span class="toggle-label">💬 댓글 자동화</span><div class="toggle" id="etog-comment" onclick="eToggle('comment')"></div></div>
+    <div id="eopt-comment" style="display:none;" class="fg"><label class="fl">댓글 개수/회</label><input type="number" id="ecomment-count" value="5" min="1" max="20" /></div>
+    <div class="toggle-row"><span class="toggle-label">👥 서로이웃 자동화</span><div class="toggle" id="etog-neighbor" onclick="eToggle('neighbor')"></div></div>
+    <div id="eopt-neighbor" style="display:none;" class="fg"><label class="fl">신청 개수/회</label><input type="number" id="eneighbor-count" value="5" min="1" max="20" /></div>
+    <div class="fg" style="margin-top:8px;"><label class="fl">자동화 대상</label>
+      <div class="target-opts">
+        <div class="target-opt selected" id="eauto-neighbor" onclick="selectETarget('neighbor')">👥 이웃</div>
+        <div class="target-opt" id="eauto-keyword" onclick="selectETarget('keyword')">🔍 키워드</div>
+        <div class="target-opt" id="eauto-both" onclick="selectETarget('both')">✨ 둘 다</div>
+      </div>
+    </div>
+    <div class="fg" id="eauto-kw-wrap" style="display:none;"><label class="fl">자동화 키워드</label><input type="text" id="eauto-keyword" /></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-account')">취소</button>
+      <button class="btn btn-primary" onclick="saveEdit()">저장</button>
+    </div>
+  </div>
+</div>
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
@@ -498,6 +586,7 @@ function showPage(name) {
   if (name === 'dashboard') loadDashboard();
   if (name === 'accounts') loadAccounts();
   if (name === 'posts') loadPosts();
+  if (name === 'schedule') loadSchedules();
   if (name === 'bulk') renderBulkAccounts();
 }
 
@@ -872,6 +961,175 @@ async function loadDashboard() {
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">${p.title}</td>
       <td>${sb(p.status)}</td><td style="color:var(--dim);">${(p.created_at||'').slice(0,10)}</td></tr>`).join('')
     + '</tbody></table></div>';
+}
+
+
+// 스케줄 관리
+let schTimes = [];
+
+function addSchTime() {
+  const t = document.getElementById('sch-time-input').value;
+  if (!t) return;
+  if (schTimes.includes(t)) { toast('이미 추가된 시간이에요', 'error'); return; }
+  schTimes.push(t);
+  renderSchTimes();
+}
+
+function removeSchTime(t) {
+  schTimes = schTimes.filter(x => x !== t);
+  renderSchTimes();
+}
+
+function renderSchTimes() {
+  document.getElementById('sch-times-list').innerHTML = schTimes.map(t =>
+    `<div class="kw-tag" onclick="removeSchTime('${t}')">${t} ✕</div>`
+  ).join('');
+}
+
+async function addSchedule() {
+  const accountId = document.getElementById('sch-account').value;
+  const keywordsRaw = document.getElementById('sch-keywords').value.trim();
+  if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
+  if (!keywordsRaw) { toast('키워드를 입력해주세요', 'error'); return; }
+  if (!schTimes.length) { toast('발행 시간을 추가해주세요', 'error'); return; }
+  const keywords = keywordsRaw.split(',').map(k => k.trim()).filter(k => k);
+  await fetch('/api/schedule', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({account_id: accountId, keywords, post_times: schTimes, post_style: document.getElementById('sch-style').value})});
+  toast('스케줄 추가됨!', 'success');
+  closeModal('modal-schedule');
+  schTimes = [];
+  renderSchTimes();
+  loadSchedules();
+}
+
+async function loadSchedules() {
+  // 계정 셀렉트 업데이트
+  const el = document.getElementById('sch-account');
+  if (el) {
+    const first = el.options[0];
+    el.innerHTML = ''; el.appendChild(first);
+    accounts.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id; opt.textContent = a.client_name + ' (' + a.naver_id + ')';
+      el.appendChild(opt);
+    });
+  }
+
+  const res = await fetch('/api/schedule');
+  const schedules = await res.json();
+  const tbl = document.getElementById('scheduleTable');
+  if (!tbl) return;
+  if (!schedules.length) {
+    tbl.innerHTML = '<div class="empty"><div class="empty-icon">⏰</div><div class="empty-text">등록된 스케줄이 없어요</div></div>';
+    return;
+  }
+  tbl.innerHTML = '<div class="table-wrap"><table><thead><tr><th>계정</th><th>키워드</th><th>발행 시간</th><th>글 형식</th><th>상태</th><th>액션</th></tr></thead><tbody>'
+    + schedules.map(s => {
+        const kws = JSON.parse(s.keywords||'[]');
+        const times = JSON.parse(s.post_times||'[]');
+        return `<tr>
+          <td>${s.client_name}</td>
+          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;">${kws.join(', ')}</td>
+          <td>${times.join(', ')}</td>
+          <td>${s.post_style}</td>
+          <td><span class="badge ${s.is_active?'bg':'by'}">${s.is_active?'활성':'비활성'}</span></td>
+          <td><div class="btn-row">
+            <button class="btn btn-ghost btn-sm" onclick="toggleSchedule(${s.id}, ${s.is_active})">${s.is_active?'끄기':'켜기'}</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSchedule(${s.id})">삭제</button>
+          </div></td>
+        </tr>`;
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+async function toggleSchedule(id, current) {
+  const res = await fetch('/api/schedule/' + id);
+  // 현재 데이터 가져오기
+  const schedules = await (await fetch('/api/schedule')).json();
+  const s = schedules.find(x => x.id === id);
+  if (!s) return;
+  await fetch('/api/schedule/' + id, {method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({...s, is_active: current ? 0 : 1})});
+  toast(current ? '스케줄 비활성화' : '스케줄 활성화', 'success');
+  loadSchedules();
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('삭제할까요?')) return;
+  await fetch('/api/schedule/' + id, {method:'DELETE'});
+  toast('삭제됨', 'success');
+  loadSchedules();
+}
+
+
+// 계정 수정
+let eBlogType = 'info';
+let eToggles = {like:false, comment:false, neighbor:false};
+let eTarget = 'neighbor';
+
+function selectEditType(el) {
+  document.querySelectorAll('#edit-type-grid .type-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  eBlogType = el.dataset.type;
+}
+
+function eToggle(t) {
+  eToggles[t] = !eToggles[t];
+  document.getElementById('etog-' + t).classList.toggle('on', eToggles[t]);
+  document.getElementById('eopt-' + t).style.display = eToggles[t] ? 'block' : 'none';
+}
+
+function selectETarget(t) {
+  eTarget = t;
+  ['neighbor','keyword','both'].forEach(o => document.getElementById('eauto-' + o).classList.remove('selected'));
+  document.getElementById('eauto-' + t).classList.add('selected');
+  document.getElementById('eauto-kw-wrap').style.display = (t==='keyword'||t==='both') ? 'block' : 'none';
+}
+
+function openEditAccount(id) {
+  const acc = accounts.find(a => a.id == id);
+  if (!acc) return;
+  document.getElementById('edit-acc-id').value = acc.id;
+  document.getElementById('edit-acc-name').value = acc.client_name;
+  document.getElementById('edit-acc-nid').value = acc.naver_id;
+  document.getElementById('edit-acc-pw').value = '';
+  eBlogType = acc.blog_type || 'info';
+  document.querySelectorAll('#edit-type-grid .type-opt').forEach(o => o.classList.toggle('selected', o.dataset.type === eBlogType));
+  eToggles = {like:!!acc.auto_like, comment:!!acc.auto_comment, neighbor:!!acc.auto_neighbor};
+  ['like','comment','neighbor'].forEach(t => {
+    document.getElementById('etog-' + t).classList.toggle('on', eToggles[t]);
+    document.getElementById('eopt-' + t).style.display = eToggles[t] ? 'block' : 'none';
+  });
+  document.getElementById('elike-count').value = acc.auto_like_count || 10;
+  document.getElementById('ecomment-count').value = acc.auto_comment_count || 5;
+  document.getElementById('eneighbor-count').value = acc.auto_neighbor_count || 5;
+  eTarget = acc.auto_target || 'neighbor';
+  ['neighbor','keyword','both'].forEach(o => document.getElementById('eauto-' + o).classList.remove('selected'));
+  document.getElementById('eauto-' + eTarget).classList.add('selected');
+  document.getElementById('eauto-kw-wrap').style.display = (eTarget==='keyword'||eTarget==='both') ? 'block' : 'none';
+  document.getElementById('eauto-keyword').value = acc.auto_keyword || '';
+  openModal('modal-edit-account');
+}
+
+async function saveEdit() {
+  const id = document.getElementById('edit-acc-id').value;
+  const name = document.getElementById('edit-acc-name').value.trim();
+  const nid = document.getElementById('edit-acc-nid').value.trim();
+  const pw = document.getElementById('edit-acc-pw').value.trim();
+  if (!name || !nid) { toast('이름과 아이디는 필수예요', 'error'); return; }
+  const payload = {
+    client_name: name, naver_id: nid, blog_type: eBlogType,
+    auto_like: eToggles.like?1:0, auto_comment: eToggles.comment?1:0, auto_neighbor: eToggles.neighbor?1:0,
+    auto_like_count: parseInt(document.getElementById('elike-count').value)||10,
+    auto_comment_count: parseInt(document.getElementById('ecomment-count').value)||5,
+    auto_neighbor_count: parseInt(document.getElementById('eneighbor-count').value)||5,
+    auto_target: eTarget, auto_keyword: document.getElementById('eauto-keyword').value
+  };
+  if (pw) payload.naver_pw = pw;
+  await fetch('/api/accounts/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  toast('저장됐어요!', 'success');
+  closeModal('modal-edit-account');
+  await loadAccountsData(); loadAccounts();
 }
 
 loadAccountsData(); loadDashboard();
