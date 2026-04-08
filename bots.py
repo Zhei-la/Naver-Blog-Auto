@@ -346,6 +346,28 @@ async def on_message(message):
 
     intent = await detect_intent(message.content)
 
+    if intent["intent"] == "chat" and any(kw in message.content for kw in ["보안", "해킹", "안전", "점검", "차단"]):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{FLASK_URL}/api/security", timeout=aiohttp.ClientTimeout(total=10)) as res:
+                    report = await res.json()
+            status = report.get("status", "알 수 없음")
+            issues = report.get("issues", [])
+            blocked = report.get("blocked_ips", [])
+            context = f"보안 상태: {status}, 이슈: {issues if issues else '없음'}, 차단 IP: {len(blocked)}개"
+            msg = await ai_response("alert", f"보안 관련 질문이 왔어. 현재 보안 상태 알려줘: {message.content}", context)
+            embed = discord.Embed(description=msg, color=0x00e676 if status == "정상" else 0xff9800)
+            embed.set_author(name="감찰관 🚨")
+            embed.add_field(name="보안 상태", value=f"{'✅ 정상' if status == '정상' else '⚠️ 경고'}", inline=True)
+            embed.add_field(name="차단 IP", value=f"{len(blocked)}개", inline=True)
+            if issues:
+                embed.add_field(name="이슈", value=", ".join(issues), inline=False)
+            await message.channel.send(embed=embed)
+        except:
+            msg = await ai_response("alert", message.content)
+            await message.channel.send(msg)
+        return
+
     if intent["intent"] == "error":
         accounts, posts = await get_stats()
         if accounts is None:
@@ -412,9 +434,9 @@ async def before_alert_morning():
 
 
 
-@tasks.loop(hours=24)
+@tasks.loop(hours=12)
 async def security_check():
-    """매일 오전 8시 보안 점검"""
+    """하루 2번 보안 점검 (오전 9시, 오후 9시)"""
     channel = alert_bot.get_channel(CH_ID)
     if not channel:
         return
@@ -454,10 +476,17 @@ async def security_check():
 async def before_security_check():
     await alert_bot.wait_until_ready()
     now = datetime.now()
-    target = now.replace(hour=8, minute=0, second=0, microsecond=0)
-    if now >= target:
-        from datetime import timedelta
-        target += timedelta(days=1)
+    # 오전 9시 또는 오후 9시 중 가장 가까운 시간으로
+    from datetime import timedelta
+    candidates = [
+        now.replace(hour=9, minute=0, second=0, microsecond=0),
+        now.replace(hour=21, minute=0, second=0, microsecond=0),
+    ]
+    future = [t for t in candidates if t > now]
+    if not future:
+        target = candidates[0] + timedelta(days=1)
+    else:
+        target = min(future)
     await asyncio.sleep((target - now).total_seconds())
 
 @tasks.loop(hours=3)
