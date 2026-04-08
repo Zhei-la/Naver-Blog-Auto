@@ -128,7 +128,7 @@ async def detect_intent(message):
 # ──────────────────────────────────────────
 # 📝 세종대왕 (Writer Bot)
 # ──────────────────────────────────────────
-writer_bot = commands.Bot(command_prefix="__DISABLED__", intents=intents)
+writer_bot = commands.Bot(command_prefix="!!", intents=intents)
 
 @writer_bot.event
 async def on_ready():
@@ -255,7 +255,7 @@ async def before_writer_morning():
 # ──────────────────────────────────────────
 # 📊 통계청장 (Report Bot)
 # ──────────────────────────────────────────
-report_bot = commands.Bot(command_prefix="__DISABLED__", intents=intents)
+report_bot = commands.Bot(command_prefix="!!", intents=intents)
 
 @report_bot.event
 async def on_ready():
@@ -327,7 +327,7 @@ async def before_report_morning():
 # ──────────────────────────────────────────
 # 🚨 감찰관 (Alert Bot)
 # ──────────────────────────────────────────
-alert_bot = commands.Bot(command_prefix="__DISABLED__", intents=intents)
+alert_bot = commands.Bot(command_prefix="!!", intents=intents)
 
 @alert_bot.event
 async def on_ready():
@@ -451,7 +451,7 @@ async def before_random_chat():
 # ──────────────────────────────────────────
 # 📈 일일 리포터 (Daily Bot)
 # ──────────────────────────────────────────
-daily_bot = commands.Bot(command_prefix="__DISABLED__", intents=intents)
+daily_bot = commands.Bot(command_prefix="!!", intents=intents)
 
 @daily_bot.event
 async def on_ready():
