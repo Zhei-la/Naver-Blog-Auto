@@ -165,11 +165,7 @@ def generate_post(keyword, blog_type="info", post_style="info", custom_prompt=""
 {links_prompt}"""
 
     if image_desc:
-        system_prompt += f"
-
-[첨부 이미지 설명]
-{image_desc}
-이미지 내용을 글에 자연스럽게 반영해줘."
+        system_prompt += f"\n\n[첨부 이미지 설명]\n{image_desc}\n이미지 내용을 글에 자연스럽게 반영해줘."
 
     response = client.chat.completions.create(
         model="gpt-4o",
