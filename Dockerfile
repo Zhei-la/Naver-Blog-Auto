@@ -18,7 +18,7 @@ RUN pip install webdriver-manager
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir openai==1.57.0 httpx==0.27.0 --force-reinstall
 
 COPY . .
 
