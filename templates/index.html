@@ -3,236 +3,96 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>네이버 블로그 자동화</title>
+<title>NaverBlog Auto</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-
 :root {
-  --bg: #0d0d0d;
-  --surface: #161616;
-  --surface2: #1e1e1e;
-  --border: #2a2a2a;
-  --green: #00e676;
-  --green-dim: rgba(0,198,83,0.12);
-  --red: #ff5252;
-  --yellow: #ffd740;
-  --blue: #40c4ff;
-  --text: #e0e0e0;
-  --text-dim: #666;
-  --radius: 8px;
+  --bg: #0d0d0d; --surface: #161616; --surface2: #1e1e1e;
+  --border: #2a2a2a; --green: #00e676; --green-dim: rgba(0,200,80,0.1);
+  --red: #ff5252; --yellow: #ffd740; --blue: #40c4ff;
+  --text: #e0e0e0; --text-dim: #666; --radius: 8px;
 }
-
 html, body {
   writing-mode: horizontal-tb !important;
-  direction: ltr !important;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Malgun Gothic', '맑은 고딕', -apple-system, BlinkMacSystemFont, sans-serif;
-  min-height: 100vh;
-  font-size: 14px;
-  line-height: 1.5;
+  background: var(--bg); color: var(--text);
+  font-family: 'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;
+  font-size: 13px; line-height: 1.6;
 }
-
-.layout {
-  display: flex;
-  flex-direction: row !important;
-  min-height: 100vh;
-  writing-mode: horizontal-tb !important;
-}
+.layout { display: flex; flex-direction: row; min-height: 100vh; }
 
 /* 사이드바 */
 .sidebar {
-  width: 240px;
-  min-width: 240px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  position: sticky;
-  top: 0;
-  overflow-y: auto;
+  width: 220px; min-width: 220px; background: var(--surface);
+  border-right: 1px solid var(--border); display: flex;
+  flex-direction: column; height: 100vh; position: sticky; top: 0; overflow-y: auto;
 }
-
-.logo {
-  padding: 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.logo h1 {
-  font-size: 16px;
-  color: var(--green);
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.logo p {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 4px;
-}
-
-.nav { padding: 12px 0; flex: 1; }
-
+.logo { padding: 18px 16px; border-bottom: 1px solid var(--border); }
+.logo h1 { font-size: 15px; color: var(--green); font-weight: 700; }
+.logo p { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+.nav { padding: 10px 0; flex: 1; }
 .nav-item {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-dim);
-  border-left: 3px solid transparent;
-  transition: all 0.15s;
-  white-space: nowrap;
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  padding: 9px 14px; cursor: pointer; font-size: 13px; color: var(--text-dim);
+  border-left: 3px solid transparent; transition: all 0.15s; white-space: nowrap;
 }
-
 .nav-item:hover { color: var(--text); background: var(--surface2); }
 .nav-item.active { color: var(--green); border-left-color: var(--green); background: var(--green-dim); }
-
-.sidebar-accounts {
-  padding: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.sidebar-accounts-title {
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  padding: 0 4px 8px;
-}
-
+.nav-section { padding: 12px 14px 4px; font-size: 10px; color: #444; text-transform: uppercase; letter-spacing: 1px; }
+.side-accs { padding: 8px; border-top: 1px solid var(--border); }
+.side-accs-title { font-size: 10px; color: #444; text-transform: uppercase; letter-spacing: 1px; padding: 4px 4px 8px; }
 .acc-chip {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
+  display: flex; flex-direction: row; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 12px;
+  color: var(--text-dim); margin-bottom: 2px; white-space: nowrap; overflow: hidden;
 }
-
 .acc-chip:hover { background: var(--surface2); color: var(--text); }
 .acc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
 
 /* 메인 */
-.main {
-  flex: 1;
-  padding: 32px;
-  min-height: 100vh;
-  overflow-y: auto;
-}
-
+.main { flex: 1; padding: 28px; overflow-y: auto; }
 .page { display: none; }
 .page.active { display: block; }
-
-/* 헤더 */
 .page-header {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
+  display: flex; flex-direction: row; align-items: center;
+  justify-content: space-between; margin-bottom: 20px;
 }
-
-.page-title { font-size: 20px; font-weight: 700; }
+.page-title { font-size: 18px; font-weight: 700; }
 .page-title span { color: var(--green); }
 
 /* 통계 */
-.stats-row {
-  display: flex;
-  flex-direction: row;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-}
-
-.stat-value { font-size: 28px; font-weight: 700; font-family: monospace; }
-.stat-label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-.green { color: var(--green); }
-.blue { color: var(--blue); }
-.yellow { color: var(--yellow); }
+.stats-row { display: flex; flex-direction: row; gap: 12px; margin-bottom: 16px; }
+.stat-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.stat-val { font-size: 26px; font-weight: 700; font-family: monospace; }
+.stat-lbl { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+.c-green { color: var(--green); } .c-blue { color: var(--blue); } .c-yellow { color: var(--yellow); }
 
 /* 카드 */
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 16px;
-}
-
-.card-title {
-  font-size: 11px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 16px;
-  font-weight: 600;
-}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
+.card-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; font-weight: 600; }
 
 /* 2컬럼 */
-.col2 {
-  display: flex;
-  flex-direction: row;
-  gap: 16px;
-}
-
-.col2 > * { flex: 1; }
+.col2 { display: flex; flex-direction: row; gap: 14px; }
+.col2 > * { flex: 1; min-width: 0; }
 
 /* 폼 */
-.form-group { margin-bottom: 12px; }
-.form-label { font-size: 12px; color: var(--text-dim); margin-bottom: 5px; display: block; }
-
+.form-group { margin-bottom: 11px; }
+.form-label { font-size: 11px; color: var(--text-dim); margin-bottom: 5px; display: block; font-weight: 600; }
 input, select, textarea {
-  width: 100%;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 9px 12px;
-  color: var(--text);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.15s;
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px 11px; color: var(--text);
+  font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s;
   writing-mode: horizontal-tb;
 }
-
 input:focus, select:focus, textarea:focus { border-color: var(--green); }
-textarea { resize: vertical; min-height: 100px; }
+textarea { resize: vertical; min-height: 90px; }
 
 /* 버튼 */
 .btn {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: var(--radius);
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  font-family: inherit;
-  font-weight: 500;
-  transition: all 0.15s;
-  white-space: nowrap;
+  display: inline-flex; flex-direction: row; align-items: center; justify-content: center;
+  gap: 5px; padding: 8px 16px; border-radius: var(--radius); border: none;
+  cursor: pointer; font-size: 13px; font-family: inherit; font-weight: 500;
+  transition: all 0.15s; white-space: nowrap;
 }
-
 .btn-primary { background: var(--green); color: #000; }
 .btn-primary:hover { background: #00ff88; }
 .btn-primary:disabled { background: #333; color: var(--text-dim); cursor: not-allowed; }
@@ -241,231 +101,261 @@ textarea { resize: vertical; min-height: 100px; }
 .btn-danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
 .btn-danger:hover { background: var(--red); color: #000; }
 .btn-blue { background: var(--blue); color: #000; }
+.btn-yellow { background: var(--yellow); color: #000; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-full { width: 100%; }
+.btn-row { display: flex; flex-direction: row; gap: 7px; align-items: center; flex-wrap: wrap; }
+
+/* 키워드 태그 */
+.kw-tags { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.kw-tag {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 20px;
+  padding: 4px 12px; font-size: 12px; cursor: pointer; transition: all 0.15s; color: var(--text-dim);
+}
+.kw-tag:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+
+/* 이미지 미리보기 */
+.img-preview { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.img-thumb { width: 80px; height: 60px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border); }
+
+/* 탭 */
+.tabs { display: flex; flex-direction: row; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab { padding: 8px 16px; cursor: pointer; font-size: 12px; color: var(--text-dim); border-bottom: 2px solid transparent; transition: all 0.15s; }
+.tab.active { color: var(--green); border-bottom-color: var(--green); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
 
 /* 테이블 */
 .table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
-th { padding: 9px 12px; text-align: left; color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; }
-td { padding: 11px 12px; border-bottom: 1px solid #1a1a1a; vertical-align: middle; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+th { padding: 8px 10px; text-align: left; color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; }
+td { padding: 10px 10px; border-bottom: 1px solid #1a1a1a; vertical-align: middle; }
 tr:hover td { background: var(--surface2); }
 
 /* 배지 */
-.badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.badge { padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .badge-green { background: var(--green-dim); color: var(--green); }
-.badge-yellow { background: rgba(255,215,64,0.12); color: var(--yellow); }
-
-/* 버튼 행 */
-.btn-row {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-  align-items: center;
-}
+.badge-yellow { background: rgba(255,215,64,0.1); color: var(--yellow); }
+.badge-blue { background: rgba(64,196,255,0.1); color: var(--blue); }
 
 /* 빈상태 */
-.empty {
-  text-align: center;
-  padding: 48px 20px;
-  color: var(--text-dim);
-}
-
-.empty-icon { font-size: 36px; margin-bottom: 10px; }
+.empty { text-align: center; padding: 40px 20px; color: var(--text-dim); }
+.empty-icon { font-size: 32px; margin-bottom: 8px; }
 .empty-text { font-size: 13px; }
 
-/* 미리보기 */
-.preview-box {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-
 /* 로딩 */
-.spinner {
-  display: inline-block;
-  width: 13px;
-  height: 13px;
-  border: 2px solid var(--border);
-  border-top-color: var(--green);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* 토스트 */
-.toast-wrap {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.toast {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 11px 16px;
-  font-size: 13px;
-  min-width: 220px;
-  animation: fadeIn 0.2s ease;
-}
-
+.toast-wrap { position: fixed; bottom: 18px; right: 18px; z-index: 9999; display: flex; flex-direction: column; gap: 7px; }
+.toast { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; min-width: 200px; animation: fadeIn 0.2s ease; }
 .toast.success { border-left: 3px solid var(--green); }
 .toast.error { border-left: 3px solid var(--red); }
 .toast.info { border-left: 3px solid var(--blue); }
-
-@keyframes fadeIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
 
 /* 모달 */
-.modal-bg {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-}
-
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: center; justify-content: center; }
 .modal-bg.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; width: 480px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+.modal-title { font-size: 14px; font-weight: 700; margin-bottom: 16px; }
+.modal-footer { display: flex; flex-direction: row; gap: 7px; justify-content: flex-end; margin-top: 16px; }
 
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  width: 500px;
-  max-width: 90vw;
-  max-height: 85vh;
-  overflow-y: auto;
-}
+/* 구분선 */
+.divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+.section-label { font-size: 11px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
 
-.modal-title { font-size: 15px; font-weight: 700; margin-bottom: 18px; }
-.modal-footer { display: flex; flex-direction: row; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+/* 발행 옵션 */
+.publish-options { display: flex; flex-direction: row; gap: 10px; }
+.pub-opt { flex: 1; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; cursor: pointer; text-align: center; transition: all 0.15s; }
+.pub-opt:hover { border-color: var(--green); }
+.pub-opt.selected { border-color: var(--green); background: var(--green-dim); }
+.pub-opt-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.pub-opt-desc { font-size: 11px; color: var(--text-dim); }
 </style>
 </head>
 <body>
-
 <div class="layout">
-  <!-- 사이드바 -->
-  <aside class="sidebar">
-    <div class="logo">
-      <h1>BlogAuto</h1>
-      <p>네이버 블로그 자동화</p>
-    </div>
-    <nav class="nav">
-      <div class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard">📊 대시보드</div>
-      <div class="nav-item" onclick="showPage('accounts')" data-page="accounts">👤 계정 관리</div>
-      <div class="nav-item" onclick="showPage('generate')" data-page="generate">✍️ 글 생성</div>
-      <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
-    </nav>
-    <div class="sidebar-accounts">
-      <div class="sidebar-accounts-title">계정 목록</div>
-      <div id="sideAccounts"><div style="font-size:11px;color:#444;padding:4px;">등록된 계정 없음</div></div>
-    </div>
-  </aside>
 
-  <!-- 메인 -->
-  <main class="main">
+<!-- 사이드바 -->
+<aside class="sidebar">
+  <div class="logo">
+    <h1>NaverBlog Auto</h1>
+    <p>네이버 블로그 자동화</p>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">메인</div>
+    <div class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard">📊 대시보드</div>
+    <div class="nav-item" onclick="showPage('accounts')" data-page="accounts">👤 계정 관리</div>
+    <div class="nav-section">글 작성</div>
+    <div class="nav-item" onclick="showPage('generate')" data-page="generate">✍️ 글 생성</div>
+    <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
+  </nav>
+  <div class="side-accs">
+    <div class="side-accs-title">계정 목록</div>
+    <div id="sideAccounts"><div style="font-size:11px;color:#444;padding:4px;">등록된 계정 없음</div></div>
+  </div>
+</aside>
 
-    <!-- 대시보드 -->
-    <div class="page active" id="page-dashboard">
-      <div class="page-header">
-        <div class="page-title">대시보드 <span>Overview</span></div>
-      </div>
-      <div class="stats-row">
-        <div class="stat-card"><div class="stat-value green" id="s-accounts">0</div><div class="stat-label">관리 계정</div></div>
-        <div class="stat-card"><div class="stat-value blue" id="s-total">0</div><div class="stat-label">전체 포스트</div></div>
-        <div class="stat-card"><div class="stat-value yellow" id="s-published">0</div><div class="stat-label">발행 완료</div></div>
-      </div>
-      <div class="card">
-        <div class="card-title">최근 포스트</div>
-        <div id="recentPosts"><div class="empty"><div class="empty-icon">📝</div><div class="empty-text">아직 포스트가 없어요</div></div></div>
-      </div>
+<!-- 메인 -->
+<main class="main">
+
+  <!-- 대시보드 -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <div class="page-title">대시보드 <span>Overview</span></div>
     </div>
-
-    <!-- 계정 관리 -->
-    <div class="page" id="page-accounts">
-      <div class="page-header">
-        <div class="page-title">계정 <span>관리</span></div>
-        <button class="btn btn-primary" onclick="openModal('modal-account')">+ 계정 추가</button>
-      </div>
-      <div class="card">
-        <div id="accountsTable"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div></div>
-      </div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val c-green" id="s-accounts">0</div><div class="stat-lbl">관리 계정</div></div>
+      <div class="stat-card"><div class="stat-val c-blue" id="s-total">0</div><div class="stat-lbl">전체 포스트</div></div>
+      <div class="stat-card"><div class="stat-val c-yellow" id="s-published">0</div><div class="stat-lbl">발행 완료</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-scheduled" style="color:#b39ddb;">0</div><div class="stat-lbl">예약 발행</div></div>
     </div>
+    <div class="card">
+      <div class="card-title">최근 포스트</div>
+      <div id="recentPosts"><div class="empty"><div class="empty-icon">📝</div><div class="empty-text">아직 포스트가 없어요</div></div></div>
+    </div>
+  </div>
 
-    <!-- 글 생성 -->
-    <div class="page" id="page-generate">
-      <div class="page-header">
-        <div class="page-title">글 <span>생성</span></div>
-      </div>
-      <div class="col2">
-        <div>
-          <div class="card">
-            <div class="card-title">글 생성 설정</div>
-            <div class="form-group">
-              <label class="form-label">계정 선택</label>
-              <select id="gen-account"><option value="">계정을 선택하세요</option></select>
+  <!-- 계정 관리 -->
+  <div class="page" id="page-accounts">
+    <div class="page-header">
+      <div class="page-title">계정 <span>관리</span></div>
+      <button class="btn btn-primary" onclick="openModal('modal-account')">+ 계정 추가</button>
+    </div>
+    <div class="card">
+      <div id="accountsTable"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div></div>
+    </div>
+  </div>
+
+  <!-- 글 생성 -->
+  <div class="page" id="page-generate">
+    <div class="page-header">
+      <div class="page-title">글 <span>생성</span></div>
+    </div>
+    <div class="col2">
+      <!-- 왼쪽: 설정 -->
+      <div>
+        <div class="card">
+          <div class="card-title">기본 설정</div>
+          <div class="form-group">
+            <label class="form-label">계정 선택</label>
+            <select id="gen-account"><option value="">계정을 선택하세요</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">키워드</label>
+            <div class="btn-row" style="margin-bottom:6px;">
+              <input type="text" id="gen-keyword" placeholder="예: 강남 맛집 추천" style="flex:1;" />
+              <button class="btn btn-ghost btn-sm" onclick="suggestKeywords()">🔍 AI 추천</button>
             </div>
-            <div class="form-group">
-              <label class="form-label">키워드 / 주제</label>
-              <input type="text" id="gen-keyword" placeholder="예: 강남 맛집 추천" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">추가 요청 (선택)</label>
-              <textarea id="gen-prompt" placeholder="예: 20대 직장인 타겟으로 써줘"></textarea>
-            </div>
-            <button class="btn btn-primary btn-full" id="gen-btn" onclick="generatePost()">✨ AI 글 생성</button>
+            <div id="kw-suggestions" class="kw-tags"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">글 형식</label>
+            <select id="gen-style">
+              <option value="info">📚 정보성 글</option>
+              <option value="review">⭐ 후기/리뷰</option>
+              <option value="listicle">📋 리스트형</option>
+              <option value="story">💬 스토리텔링</option>
+              <option value="compare">⚖️ 비교형</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">추가 요청 (선택)</label>
+            <textarea id="gen-prompt" placeholder="예: 20대 직장인 타겟, 제품 3개 비교해줘" style="min-height:70px;"></textarea>
           </div>
         </div>
-        <div>
-          <div class="card">
-            <div class="card-title">미리보기</div>
-            <div id="preview-empty" class="empty" style="padding:40px 0;">
-              <div class="empty-icon">✍️</div>
-              <div class="empty-text">글을 생성하면 여기에 표시돼요</div>
+
+        <div class="card">
+          <div class="card-title">수익 링크 설정 (선택)</div>
+          <div class="form-group">
+            <label class="form-label">CTA 링크 (클릭 유도)</label>
+            <input type="text" id="gen-cta-link" placeholder="https://example.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">CTA 문구</label>
+            <input type="text" id="gen-cta-text" placeholder="예: 지금 바로 확인하기 →" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">CPA 링크 (제휴 마케팅)</label>
+            <input type="text" id="gen-cpa-link" placeholder="https://affiliate.example.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">CPS 링크 (쇼핑 제휴)</label>
+            <input type="text" id="gen-cps-link" placeholder="https://shop.example.com" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">발행 설정</div>
+          <div class="publish-options" style="margin-bottom:12px;">
+            <div class="pub-opt selected" id="opt-now" onclick="selectPublishOpt('now')">
+              <div class="pub-opt-title">🚀 즉시 발행</div>
+              <div class="pub-opt-desc">생성 후 바로 올림</div>
             </div>
-            <div id="preview-content" style="display:none;">
-              <div class="form-group">
-                <label class="form-label">제목</label>
-                <input type="text" id="preview-title" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">본문</label>
-                <textarea id="preview-body" style="min-height:180px;"></textarea>
-              </div>
-              <div class="btn-row">
-                <button class="btn btn-primary" onclick="publishPost()" id="pub-btn" style="flex:1;">🚀 네이버 발행</button>
-                <button class="btn btn-ghost" onclick="saveOnly()">저장만</button>
-                <button class="btn btn-danger btn-sm" onclick="discardPost()">✕</button>
-              </div>
+            <div class="pub-opt" id="opt-review" onclick="selectPublishOpt('review')">
+              <div class="pub-opt-title">👀 검토 후 발행</div>
+              <div class="pub-opt-desc">미리보기 확인 후</div>
+            </div>
+            <div class="pub-opt" id="opt-schedule" onclick="selectPublishOpt('schedule')">
+              <div class="pub-opt-title">⏰ 예약 발행</div>
+              <div class="pub-opt-desc">시간 지정해서 올림</div>
+            </div>
+          </div>
+          <div id="schedule-input" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">예약 일시</label>
+              <input type="datetime-local" id="gen-scheduled-at" />
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full" id="gen-btn" onclick="generatePost()">✨ AI 글 생성</button>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 미리보기 -->
+      <div>
+        <div class="card" style="position:sticky;top:20px;">
+          <div class="card-title">미리보기</div>
+          <div id="preview-empty" class="empty" style="padding:50px 0;">
+            <div class="empty-icon">✍️</div>
+            <div class="empty-text">글을 생성하면 여기에 표시돼요</div>
+          </div>
+          <div id="preview-content" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">제목</label>
+              <input type="text" id="preview-title" />
+            </div>
+            <div id="preview-images" class="img-preview"></div>
+            <div class="form-group" style="margin-top:10px;">
+              <label class="form-label">본문</label>
+              <textarea id="preview-body" style="min-height:220px;"></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="publishPost()" id="pub-btn" style="flex:1;">🚀 네이버 발행</button>
+              <button class="btn btn-ghost" onclick="saveOnly()">저장만</button>
+              <button class="btn btn-danger btn-sm" onclick="discardPost()">✕</button>
             </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- 포스트 목록 -->
-    <div class="page" id="page-posts">
-      <div class="page-header">
-        <div class="page-title">포스트 <span>목록</span></div>
-        <select id="filter-account" onchange="loadPosts()" style="width:auto;padding:8px 12px;">
-          <option value="">전체 계정</option>
-        </select>
-      </div>
-      <div class="card">
-        <div id="postsTable"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">포스트가 없어요</div></div></div>
-      </div>
+  <!-- 포스트 목록 -->
+  <div class="page" id="page-posts">
+    <div class="page-header">
+      <div class="page-title">포스트 <span>목록</span></div>
+      <select id="filter-account" onchange="loadPosts()" style="width:auto;padding:7px 11px;">
+        <option value="">전체 계정</option>
+      </select>
     </div>
+    <div class="card">
+      <div id="postsTable"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">포스트가 없어요</div></div></div>
+    </div>
+  </div>
 
-  </main>
+</main>
 </div>
 
 <!-- 계정 추가 모달 -->
@@ -504,12 +394,12 @@ tr:hover td { background: var(--surface2); }
   </div>
 </div>
 
-<!-- 토스트 -->
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
 let currentPostId = null;
 let accounts = [];
+let publishOpt = 'review';
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -532,16 +422,21 @@ function toast(msg, type = 'info') {
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+function selectPublishOpt(opt) {
+  publishOpt = opt;
+  ['now','review','schedule'].forEach(o => document.getElementById('opt-' + o).classList.remove('selected'));
+  document.getElementById('opt-' + opt).classList.add('selected');
+  document.getElementById('schedule-input').style.display = opt === 'schedule' ? 'block' : 'none';
+}
+
 async function loadAccountsData() {
   const res = await fetch('/api/accounts');
   accounts = await res.json();
-
   const side = document.getElementById('sideAccounts');
   side.innerHTML = accounts.length === 0
     ? '<div style="font-size:11px;color:#444;padding:4px;">등록된 계정 없음</div>'
     : accounts.map(a => `<div class="acc-chip" onclick="filterByAccount(${a.id})"><div class="acc-dot"></div><span>${a.client_name}</span></div>`).join('');
-
-  ['gen-account', 'filter-account'].forEach(id => {
+  ['gen-account','filter-account'].forEach(id => {
     const el = document.getElementById(id);
     const first = el.options[0];
     el.innerHTML = '';
@@ -555,54 +450,78 @@ async function loadAccountsData() {
   });
 }
 
-async function loadAccounts() {
-  await loadAccountsData();
-  const el = document.getElementById('accountsTable');
-  if (!accounts.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div>';
-    return;
-  }
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>주제</th><th>등록일</th><th>액션</th></tr></thead><tbody>'
-    + accounts.map(a => `<tr><td><strong>${a.client_name}</strong></td><td style="font-family:monospace;">${a.naver_id}</td><td>${a.topic_type}</td><td style="color:var(--text-dim);">${(a.created_at||'').slice(0,10)}</td><td><button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">삭제</button></td></tr>`).join('')
-    + '</tbody></table></div>';
+async function suggestKeywords() {
+  const accountId = document.getElementById('gen-account').value;
+  const topic = document.getElementById('gen-keyword').value.trim();
+  if (!topic) { toast('키워드 힌트를 먼저 입력해줘!', 'error'); return; }
+  const account = accounts.find(a => a.id == accountId);
+  const topicType = account ? account.topic_type : '기타';
+  const container = document.getElementById('kw-suggestions');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({topic, topic_type: topicType, count: 6})
+    });
+    const data = await res.json();
+    if (data.success) {
+      container.innerHTML = data.keywords.map(kw =>
+        `<div class="kw-tag" onclick="selectKeyword('${kw}')">${kw}</div>`
+      ).join('');
+    }
+  } catch(e) { toast('키워드 추천 실패', 'error'); container.innerHTML = ''; }
 }
 
-async function addAccount() {
-  const name = document.getElementById('acc-name').value.trim();
-  const id = document.getElementById('acc-id').value.trim();
-  const pw = document.getElementById('acc-pw').value.trim();
-  const topic = document.getElementById('acc-topic').value;
-  if (!name || !id || !pw) { toast('모든 항목을 입력해주세요', 'error'); return; }
-  const res = await fetch('/api/accounts', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({client_name:name,naver_id:id,naver_pw:pw,topic_type:topic}) });
-  if ((await res.json()).success) { toast('계정 추가됨', 'success'); closeModal('modal-account'); await loadAccountsData(); loadAccounts(); }
-}
-
-async function deleteAccount(id) {
-  if (!confirm('삭제할까요?')) return;
-  await fetch('/api/accounts/' + id, {method:'DELETE'});
-  toast('삭제됨', 'success');
-  await loadAccountsData(); loadAccounts();
+function selectKeyword(kw) {
+  document.getElementById('gen-keyword').value = kw;
+  document.getElementById('kw-suggestions').innerHTML = '';
 }
 
 async function generatePost() {
   const accountId = document.getElementById('gen-account').value;
   const keyword = document.getElementById('gen-keyword').value.trim();
-  const prompt = document.getElementById('gen-prompt').value.trim();
   if (!accountId) { toast('계정을 선택해주세요', 'error'); return; }
   if (!keyword) { toast('키워드를 입력해주세요', 'error'); return; }
+
   const btn = document.getElementById('gen-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> 생성 중...';
+
+  const payload = {
+    account_id: accountId, keyword,
+    post_style: document.getElementById('gen-style').value,
+    custom_prompt: document.getElementById('gen-prompt').value,
+    cta_link: document.getElementById('gen-cta-link').value,
+    cta_text: document.getElementById('gen-cta-text').value,
+    cpa_link: document.getElementById('gen-cpa-link').value,
+    cps_link: document.getElementById('gen-cps-link').value,
+  };
+
+  if (publishOpt === 'schedule') {
+    payload.scheduled_at = document.getElementById('gen-scheduled-at').value;
+  }
+
   try {
-    const res = await fetch('/api/generate', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({account_id:accountId,keyword,custom_prompt:prompt}) });
+    const res = await fetch('/api/generate', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
     const data = await res.json();
     if (data.success) {
       currentPostId = data.post_id;
       document.getElementById('preview-title').value = data.title;
       document.getElementById('preview-body').value = data.body;
+      // 이미지 미리보기
+      const imgWrap = document.getElementById('preview-images');
+      if (data.images && data.images.length) {
+        imgWrap.innerHTML = data.images.map(url => `<img src="${url}" class="img-thumb" />`).join('');
+      } else { imgWrap.innerHTML = ''; }
       document.getElementById('preview-empty').style.display = 'none';
       document.getElementById('preview-content').style.display = 'block';
       toast('글 생성 완료!', 'success');
+      // 즉시 발행이면 바로 발행
+      if (publishOpt === 'now') { await publishPost(); return; }
+      if (publishOpt === 'schedule') { toast('예약 발행으로 저장됐어요 ⏰', 'info'); return; }
     } else { toast('실패: ' + data.message, 'error'); }
   } catch(e) { toast('오류 발생', 'error'); }
   btn.disabled = false;
@@ -611,7 +530,10 @@ async function generatePost() {
 
 async function publishPost() {
   if (!currentPostId) return;
-  await fetch('/api/posts/' + currentPostId, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title:document.getElementById('preview-title').value,body:document.getElementById('preview-body').value}) });
+  await fetch('/api/posts/' + currentPostId, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({title: document.getElementById('preview-title').value, body: document.getElementById('preview-body').value})
+  });
   const btn = document.getElementById('pub-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> 발행 중...';
@@ -627,8 +549,11 @@ async function publishPost() {
 
 async function saveOnly() {
   if (!currentPostId) return;
-  await fetch('/api/posts/' + currentPostId, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title:document.getElementById('preview-title').value,body:document.getElementById('preview-body').value}) });
-  toast('저장됨', 'success');
+  await fetch('/api/posts/' + currentPostId, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({title: document.getElementById('preview-title').value, body: document.getElementById('preview-body').value})
+  });
+  toast('저장됐어요', 'success');
 }
 
 function discardPost() {
@@ -637,14 +562,43 @@ function discardPost() {
   document.getElementById('preview-content').style.display = 'none';
 }
 
+async function loadAccounts() {
+  await loadAccountsData();
+  const el = document.getElementById('accountsTable');
+  if (!accounts.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div>'; return; }
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>주제</th><th>등록일</th><th>액션</th></tr></thead><tbody>'
+    + accounts.map(a => `<tr><td><strong>${a.client_name}</strong></td><td style="font-family:monospace;">${a.naver_id}</td><td>${a.topic_type}</td><td style="color:var(--text-dim);">${(a.created_at||'').slice(0,10)}</td><td><button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">삭제</button></td></tr>`).join('')
+    + '</tbody></table></div>';
+}
+
+async function addAccount() {
+  const name = document.getElementById('acc-name').value.trim();
+  const id = document.getElementById('acc-id').value.trim();
+  const pw = document.getElementById('acc-pw').value.trim();
+  const topic = document.getElementById('acc-topic').value;
+  if (!name || !id || !pw) { toast('모든 항목을 입력해주세요', 'error'); return; }
+  await fetch('/api/accounts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({client_name:name,naver_id:id,naver_pw:pw,topic_type:topic})});
+  toast('계정 추가됨', 'success');
+  closeModal('modal-account');
+  await loadAccountsData(); loadAccounts();
+}
+
+async function deleteAccount(id) {
+  if (!confirm('삭제할까요?')) return;
+  await fetch('/api/accounts/' + id, {method:'DELETE'});
+  toast('삭제됨', 'success');
+  await loadAccountsData(); loadAccounts();
+}
+
 async function loadPosts() {
   const accountId = document.getElementById('filter-account').value;
   const res = await fetch('/api/posts' + (accountId ? '?account_id=' + accountId : ''));
   const posts = await res.json();
   const el = document.getElementById('postsTable');
   if (!posts.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">포스트가 없어요</div></div>'; return; }
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>계정</th><th>키워드</th><th>제목</th><th>상태</th><th>날짜</th><th>액션</th></tr></thead><tbody>'
-    + posts.map(p => `<tr><td>${p.client_name}</td><td><span style="background:var(--surface2);padding:2px 7px;border-radius:4px;font-size:11px;">${p.keyword}</span></td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">${p.title}</td><td><span class="badge ${p.status==='published'?'badge-green':'badge-yellow'}">${p.status==='published'?'발행됨':'초안'}</span></td><td style="color:var(--text-dim);">${(p.created_at||'').slice(0,10)}</td><td><div class="btn-row">${p.status!=='published'?`<button class="btn btn-blue btn-sm" onclick="publishDraft(${p.id})">발행</button>`:''} ${p.published_url?`<a href="${p.published_url}" target="_blank" class="btn btn-ghost btn-sm">보기</a>`:''} <button class="btn btn-danger btn-sm" onclick="deletePost(${p.id})">삭제</button></div></td></tr>`).join('')
+  const statusBadge = s => s === 'published' ? '<span class="badge badge-green">발행됨</span>' : s === 'scheduled' ? '<span class="badge badge-blue">예약됨</span>' : '<span class="badge badge-yellow">초안</span>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>계정</th><th>키워드</th><th>제목</th><th>형식</th><th>상태</th><th>날짜</th><th>액션</th></tr></thead><tbody>'
+    + posts.map(p => `<tr><td>${p.client_name}</td><td><span style="background:var(--surface2);padding:2px 7px;border-radius:4px;">${p.keyword}</span></td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;">${p.title}</td><td style="color:var(--text-dim);">${p.post_style||'info'}</td><td>${statusBadge(p.status)}</td><td style="color:var(--text-dim);">${(p.created_at||'').slice(0,10)}</td><td><div class="btn-row">${p.status!=='published'?`<button class="btn btn-blue btn-sm" onclick="publishDraft(${p.id})">발행</button>`:''} ${p.published_url?`<a href="${p.published_url}" target="_blank" class="btn btn-ghost btn-sm">보기</a>`:''} <button class="btn btn-danger btn-sm" onclick="deletePost(${p.id})">삭제</button></div></td></tr>`).join('')
     + '</tbody></table></div>';
 }
 
@@ -674,16 +628,17 @@ async function loadDashboard() {
   document.getElementById('s-accounts').textContent = accounts.length;
   document.getElementById('s-total').textContent = posts.length;
   document.getElementById('s-published').textContent = posts.filter(p => p.status === 'published').length;
+  document.getElementById('s-scheduled').textContent = posts.filter(p => p.status === 'scheduled').length;
   const el = document.getElementById('recentPosts');
   const recent = posts.slice(0, 8);
   if (!recent.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📝</div><div class="empty-text">아직 포스트가 없어요</div></div>'; return; }
+  const statusBadge = s => s === 'published' ? '<span class="badge badge-green">발행됨</span>' : s === 'scheduled' ? '<span class="badge badge-blue">예약됨</span>' : '<span class="badge badge-yellow">초안</span>';
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>계정</th><th>키워드</th><th>제목</th><th>상태</th><th>날짜</th></tr></thead><tbody>'
-    + recent.map(p => `<tr><td>${p.client_name}</td><td><span style="background:var(--surface2);padding:2px 7px;border-radius:4px;font-size:11px;">${p.keyword}</span></td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">${p.title}</td><td><span class="badge ${p.status==='published'?'badge-green':'badge-yellow'}">${p.status==='published'?'발행됨':'초안'}</span></td><td style="color:var(--text-dim);">${(p.created_at||'').slice(0,10)}</td></tr>`).join('')
+    + recent.map(p => `<tr><td>${p.client_name}</td><td><span style="background:var(--surface2);padding:2px 7px;border-radius:4px;">${p.keyword}</span></td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${p.title}</td><td>${statusBadge(p.status)}</td><td style="color:var(--text-dim);">${(p.created_at||'').slice(0,10)}</td></tr>`).join('')
     + '</tbody></table></div>';
 }
 
-loadAccountsData();
-loadDashboard();
+loadAccountsData(); loadDashboard();
 </script>
 </body>
 </html>
