@@ -259,6 +259,30 @@ tr:hover td { background:var(--s2); }
             </select>
           </div>
           <div class="fg"><label class="fl">추가 요청 (선택)</label><textarea id="gen-prompt" placeholder="예: 20대 직장인 타겟, 제품 3개 비교해줘" style="min-height:60px;"></textarea></div>
+          <div class="col2">
+            <div class="fg"><label class="fl">글자수</label>
+              <select id="gen-wordcount">
+                <option value="600">600자 (짧게)</option>
+                <option value="1000" selected>1000자 (보통)</option>
+                <option value="1500">1500자 (길게)</option>
+                <option value="2000">2000자 (상세)</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">사진 장수</label>
+              <select id="gen-imgcount">
+                <option value="1">1장</option>
+                <option value="2">2장</option>
+                <option value="3" selected>3장</option>
+                <option value="5">5장</option>
+              </select>
+            </div>
+          </div>
+          <div class="fg"><label class="fl">📍 네이버 플레이스 업체명 (맛집/카페 등)</label><input type="text" id="gen-place" placeholder="예: 강남 스타벅스 삼성점" /></div>
+          <div class="fg">
+            <label class="fl">🖼️ 이미지 업로드 (AI가 인식해서 글 작성)</label>
+            <input type="file" id="gen-image" accept="image/*" onchange="previewUploadedImage()" style="padding:6px;" />
+            <div id="uploaded-preview" style="margin-top:6px;"></div>
+          </div>
         </div>
         <div class="card">
           <div class="card-title">수익 링크 설정 (선택)</div>
@@ -758,13 +782,31 @@ async function generatePost() {
   if (!keyword) { toast('키워드를 입력해주세요', 'error'); return; }
   const btn = document.getElementById('gen-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 생성 중...';
+  // 이미지 처리
+  let image_base64 = '';
+  let image_type = 'image/jpeg';
+  const imgFile = document.getElementById('gen-image').files[0];
+  if (imgFile) {
+    image_base64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(imgFile);
+    });
+    image_type = imgFile.type;
+  }
+
   const payload = { account_id: accountId, keyword,
     post_style: document.getElementById('gen-style').value,
     custom_prompt: document.getElementById('gen-prompt').value,
     cta_link: document.getElementById('gen-cta-link').value,
     cta_text: document.getElementById('gen-cta-text').value,
     cpa_link: document.getElementById('gen-cpa-link').value,
-    cps_link: document.getElementById('gen-cps-link').value };
+    cps_link: document.getElementById('gen-cps-link').value,
+    place_name: document.getElementById('gen-place').value,
+    word_count: parseInt(document.getElementById('gen-wordcount').value),
+    image_count: parseInt(document.getElementById('gen-imgcount').value),
+    image_base64, image_type };
   if (pubOpt === 'schedule') payload.scheduled_at = document.getElementById('gen-scheduled-at').value;
   try {
     const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
@@ -1130,6 +1172,18 @@ async function saveEdit() {
   toast('저장됐어요!', 'success');
   closeModal('modal-edit-account');
   await loadAccountsData(); loadAccounts();
+}
+
+function previewUploadedImage() {
+  const file = document.getElementById('gen-image').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('uploaded-preview').innerHTML =
+      `<img src="${e.target.result}" style="max-width:100%;max-height:120px;border-radius:6px;border:1px solid var(--border);" />
+       <div style="font-size:11px;color:var(--dim);margin-top:4px;">✅ ${file.name} - AI가 이미지를 인식해서 글에 반영해요</div>`;
+  };
+  reader.readAsDataURL(file);
 }
 
 loadAccountsData(); loadDashboard();
