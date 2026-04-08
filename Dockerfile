@@ -18,7 +18,7 @@ RUN pip install webdriver-manager
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt && pip install openai==1.57.0 httpx==0.27.0 --upgrade
 
 COPY . .
 
