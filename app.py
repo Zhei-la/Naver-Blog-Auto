@@ -1,8 +1,7 @@
 from flask import Flask, render_template, request, jsonify
-import sqlite3
-import os
+import sqlite3, os, json
 from datetime import datetime
-from writer import generate_post, suggest_keywords
+from writer import generate_post, suggest_keywords, BLOG_TYPES
 from blogger import publish_post
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -17,7 +16,15 @@ def init_db():
         client_name TEXT NOT NULL,
         naver_id TEXT NOT NULL,
         naver_pw TEXT NOT NULL,
-        topic_type TEXT DEFAULT '기타',
+        blog_type TEXT DEFAULT 'info',
+        auto_like INTEGER DEFAULT 0,
+        auto_comment INTEGER DEFAULT 0,
+        auto_neighbor INTEGER DEFAULT 0,
+        auto_like_count INTEGER DEFAULT 10,
+        auto_comment_count INTEGER DEFAULT 5,
+        auto_neighbor_count INTEGER DEFAULT 5,
+        auto_target TEXT DEFAULT 'neighbor',
+        auto_keyword TEXT DEFAULT '',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS posts (
@@ -27,6 +34,7 @@ def init_db():
         title TEXT,
         body TEXT,
         images TEXT DEFAULT '[]',
+        blog_type TEXT DEFAULT 'info',
         post_style TEXT DEFAULT 'info',
         cta_link TEXT DEFAULT '',
         cta_text TEXT DEFAULT '',
@@ -50,145 +58,276 @@ def get_db():
 @app.route('/api/accounts', methods=['GET'])
 def get_accounts():
     conn = get_db()
-    accounts = conn.execute('SELECT id, client_name, naver_id, topic_type, created_at FROM accounts').fetchall()
+    rows = conn.execute('SELECT * FROM accounts').fetchall()
     conn.close()
-    return jsonify([dict(a) for a in accounts])
+    return jsonify([dict(r) for r in rows])
 
 @app.route('/api/accounts', methods=['POST'])
 def add_account():
-    data = request.json
+    d = request.json
     conn = get_db()
-    conn.execute('INSERT INTO accounts (client_name, naver_id, naver_pw, topic_type) VALUES (?, ?, ?, ?)',
-                 (data['client_name'], data['naver_id'], data['naver_pw'], data.get('topic_type', '기타')))
+    conn.execute('''INSERT INTO accounts 
+        (client_name, naver_id, naver_pw, blog_type,
+         auto_like, auto_comment, auto_neighbor,
+         auto_like_count, auto_comment_count, auto_neighbor_count,
+         auto_target, auto_keyword)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (d['client_name'], d['naver_id'], d['naver_pw'], d.get('blog_type','info'),
+         d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
+         d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
+         d.get('auto_target','neighbor'), d.get('auto_keyword','')))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
 
-@app.route('/api/accounts/<int:account_id>', methods=['DELETE'])
-def delete_account(account_id):
+@app.route('/api/accounts/<int:aid>', methods=['PUT'])
+def update_account(aid):
+    d = request.json
     conn = get_db()
-    conn.execute('DELETE FROM accounts WHERE id = ?', (account_id,))
+    conn.execute('''UPDATE accounts SET
+        auto_like=?, auto_comment=?, auto_neighbor=?,
+        auto_like_count=?, auto_comment_count=?, auto_neighbor_count=?,
+        auto_target=?, auto_keyword=? WHERE id=?''',
+        (d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
+         d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
+         d.get('auto_target','neighbor'), d.get('auto_keyword',''), aid))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
 
-# ── 키워드 추천 API ──
+@app.route('/api/accounts/<int:aid>', methods=['DELETE'])
+def delete_account(aid):
+    conn = get_db()
+    conn.execute('DELETE FROM accounts WHERE id=?', (aid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/blog_types', methods=['GET'])
+def get_blog_types():
+    return jsonify([{"key": k, "name": v["name"]} for k, v in BLOG_TYPES.items()])
+
+# ── 키워드 추천 ──
 @app.route('/api/keywords', methods=['POST'])
 def keywords():
-    data = request.json
+    d = request.json
     try:
-        kws = suggest_keywords(data['topic'], data.get('topic_type', '기타'), data.get('count', 5))
+        kws = suggest_keywords(d['topic'], d.get('blog_type','info'), d.get('count',6))
         return jsonify({"success": True, "keywords": kws})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
-# ── 글 생성 API ──
+# ── 글 생성 ──
 @app.route('/api/generate', methods=['POST'])
 def generate():
-    data = request.json
-    account_id = data['account_id']
-    
+    d = request.json
     conn = get_db()
-    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (account_id,)).fetchone()
+    account = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
     if not account:
         return jsonify({"success": False, "message": "계정 없음"})
-    
     try:
         result = generate_post(
-            keyword=data['keyword'],
-            topic_type=account['topic_type'],
-            post_style=data.get('post_style', 'info'),
-            custom_prompt=data.get('custom_prompt', ''),
-            cta_link=data.get('cta_link', ''),
-            cta_text=data.get('cta_text', ''),
-            cpa_link=data.get('cpa_link', ''),
-            cps_link=data.get('cps_link', '')
+            keyword=d['keyword'],
+            blog_type=account['blog_type'],
+            post_style=d.get('post_style','info'),
+            custom_prompt=d.get('custom_prompt',''),
+            cta_link=d.get('cta_link',''),
+            cta_text=d.get('cta_text',''),
+            cpa_link=d.get('cpa_link',''),
+            cps_link=d.get('cps_link','')
         )
     except Exception as e:
+        conn.close()
         return jsonify({"success": False, "message": str(e)})
-    
-    import json
-    cursor = conn.execute('''INSERT INTO posts 
-        (account_id, keyword, title, body, images, post_style, cta_link, cta_text, cpa_link, cps_link, status, scheduled_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (account_id, data['keyword'], result['title'], result['body'],
-         json.dumps(result['images']), data.get('post_style', 'info'),
-         data.get('cta_link', ''), data.get('cta_text', ''),
-         data.get('cpa_link', ''), data.get('cps_link', ''),
-         'scheduled' if data.get('scheduled_at') else 'draft',
-         data.get('scheduled_at', '')))
+
+    cursor = conn.execute('''INSERT INTO posts
+        (account_id, keyword, title, body, images, blog_type, post_style,
+         cta_link, cta_text, cpa_link, cps_link, status, scheduled_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (d['account_id'], d['keyword'], result['title'], result['body'],
+         json.dumps(result['images']), account['blog_type'], d.get('post_style','info'),
+         d.get('cta_link',''), d.get('cta_text',''),
+         d.get('cpa_link',''), d.get('cps_link',''),
+         'scheduled' if d.get('scheduled_at') else 'draft',
+         d.get('scheduled_at','')))
     post_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    
-    return jsonify({"success": True, "post_id": post_id, 
+    return jsonify({"success": True, "post_id": post_id,
                     "title": result['title'], "body": result['body'],
                     "images": result['images']})
 
-# ── 발행 API ──
-@app.route('/api/publish/<int:post_id>', methods=['POST'])
-def publish(post_id):
+# ── 대량 발행 ──
+@app.route('/api/bulk_generate', methods=['POST'])
+def bulk_generate():
+    d = request.json
+    account_ids = d.get('account_ids', [])
+    keyword = d.get('keyword', '')
+    results = []
     conn = get_db()
-    post = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw 
-                          FROM posts p JOIN accounts a ON p.account_id = a.id 
-                          WHERE p.id = ?''', (post_id,)).fetchone()
+    for aid in account_ids:
+        account = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not account:
+            continue
+        try:
+            result = generate_post(keyword=keyword, blog_type=account['blog_type'],
+                                   post_style=d.get('post_style','info'))
+            cursor = conn.execute('''INSERT INTO posts
+                (account_id, keyword, title, body, images, blog_type, post_style, status)
+                VALUES (?,?,?,?,?,?,?,?)''',
+                (aid, keyword, result['title'], result['body'],
+                 json.dumps(result['images']), account['blog_type'],
+                 d.get('post_style','info'), 'draft'))
+            results.append({"account": account['client_name'], "post_id": cursor.lastrowid,
+                           "title": result['title'], "success": True})
+        except Exception as e:
+            results.append({"account": account['client_name'], "success": False, "message": str(e)})
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "results": results})
+
+@app.route('/api/bulk_publish', methods=['POST'])
+def bulk_publish():
+    d = request.json
+    post_ids = d.get('post_ids', [])
+    results = []
+    conn = get_db()
+    for pid in post_ids:
+        post = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw
+                               FROM posts p JOIN accounts a ON p.account_id=a.id
+                               WHERE p.id=?''', (pid,)).fetchone()
+        if not post:
+            continue
+        result = publish_post(post['naver_id'], post['naver_pw'], post['title'], post['body'])
+        if result['success']:
+            conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                        ('published', result['url'], datetime.now().isoformat(), pid))
+        results.append({"post_id": pid, **result})
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "results": results})
+
+# ── 발행 ──
+@app.route('/api/publish/<int:pid>', methods=['POST'])
+def publish(pid):
+    conn = get_db()
+    post = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw
+                           FROM posts p JOIN accounts a ON p.account_id=a.id
+                           WHERE p.id=?''', (pid,)).fetchone()
     if not post:
         return jsonify({"success": False, "message": "포스트 없음"})
-    
     result = publish_post(post['naver_id'], post['naver_pw'], post['title'], post['body'])
-    
     if result['success']:
-        conn.execute('UPDATE posts SET status = ?, published_url = ?, published_at = ? WHERE id = ?',
-                     ('published', result['url'], datetime.now().isoformat(), post_id))
+        conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                     ('published', result['url'], datetime.now().isoformat(), pid))
     conn.commit()
     conn.close()
     return jsonify(result)
 
-# ── 포스트 API ──
+# ── 포스트 ──
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
-    account_id = request.args.get('account_id')
+    aid = request.args.get('account_id')
     conn = get_db()
-    if account_id:
-        posts = conn.execute('''SELECT p.*, a.client_name, a.naver_id FROM posts p 
-                               JOIN accounts a ON p.account_id = a.id 
-                               WHERE p.account_id = ? ORDER BY p.created_at DESC''', (account_id,)).fetchall()
+    if aid:
+        posts = conn.execute('''SELECT p.*, a.client_name FROM posts p
+                               JOIN accounts a ON p.account_id=a.id
+                               WHERE p.account_id=? ORDER BY p.created_at DESC''', (aid,)).fetchall()
     else:
-        posts = conn.execute('''SELECT p.*, a.client_name, a.naver_id FROM posts p 
-                               JOIN accounts a ON p.account_id = a.id 
+        posts = conn.execute('''SELECT p.*, a.client_name FROM posts p
+                               JOIN accounts a ON p.account_id=a.id
                                ORDER BY p.created_at DESC LIMIT 100''').fetchall()
     conn.close()
     return jsonify([dict(p) for p in posts])
 
-@app.route('/api/posts/<int:post_id>', methods=['PUT'])
-def update_post(post_id):
-    data = request.json
+@app.route('/api/posts/<int:pid>', methods=['PUT'])
+def update_post(pid):
+    d = request.json
     conn = get_db()
-    conn.execute('UPDATE posts SET title = ?, body = ? WHERE id = ?',
-                 (data['title'], data['body'], post_id))
+    conn.execute('UPDATE posts SET title=?, body=? WHERE id=?', (d['title'], d['body'], pid))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
 
-@app.route('/api/posts/<int:post_id>', methods=['DELETE'])
-def delete_post(post_id):
+@app.route('/api/posts/<int:pid>', methods=['DELETE'])
+def delete_post(pid):
     conn = get_db()
-    conn.execute('DELETE FROM posts WHERE id = ?', (post_id,))
+    conn.execute('DELETE FROM posts WHERE id=?', (pid,))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
 
-# ── 예약 발행 스케줄러 ──
+# ── 인게이저 ──
+from engager import auto_like, auto_comment, auto_neighbor, auto_engage
+
+@app.route('/api/engage/like', methods=['POST'])
+def engage_like():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_like(acc['naver_id'], acc['naver_pw'],
+                             d.get('target','neighbor'), d.get('keyword',''), d.get('count',10)))
+
+@app.route('/api/engage/comment', methods=['POST'])
+def engage_comment():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_comment(acc['naver_id'], acc['naver_pw'],
+                                d.get('target','neighbor'), d.get('keyword',''),
+                                d.get('count',5), d.get('tone','friendly'), d.get('custom_comment','')))
+
+@app.route('/api/engage/neighbor', methods=['POST'])
+def engage_neighbor():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_neighbor(acc['naver_id'], acc['naver_pw'],
+                                 d.get('keyword',''), d.get('count',10), d.get('message','')))
+
+@app.route('/api/engage/engage', methods=['POST'])
+def engage_all():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_engage(acc['naver_id'], acc['naver_pw'],
+                               d.get('target','neighbor'), d.get('keyword',''),
+                               d.get('like_count',10), d.get('comment_count',5), d.get('tone','friendly')))
+
+# ── 자동화 스케줄러 ──
+def run_auto_tasks():
+    conn = get_db()
+    accounts = conn.execute('SELECT * FROM accounts').fetchall()
+    conn.close()
+    for acc in accounts:
+        if acc['auto_like']:
+            auto_like(acc['naver_id'], acc['naver_pw'],
+                      acc['auto_target'], acc['auto_keyword'], acc['auto_like_count'])
+        if acc['auto_comment']:
+            auto_comment(acc['naver_id'], acc['naver_pw'],
+                         acc['auto_target'], acc['auto_keyword'], acc['auto_comment_count'])
+        if acc['auto_neighbor']:
+            auto_neighbor(acc['naver_id'], acc['naver_pw'],
+                          acc['auto_keyword'], acc['auto_neighbor_count'])
+
 def check_scheduled_posts():
     conn = get_db()
     now = datetime.now().strftime("%Y-%m-%dT%H:%M")
-    posts = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw 
-                           FROM posts p JOIN accounts a ON p.account_id = a.id
-                           WHERE p.status = 'scheduled' AND p.scheduled_at <= ?''', (now,)).fetchall()
+    posts = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw
+                            FROM posts p JOIN accounts a ON p.account_id=a.id
+                            WHERE p.status='scheduled' AND p.scheduled_at<=?''', (now,)).fetchall()
     for post in posts:
         result = publish_post(post['naver_id'], post['naver_pw'], post['title'], post['body'])
         if result['success']:
-            conn.execute('UPDATE posts SET status = ?, published_url = ?, published_at = ? WHERE id = ?',
+            conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
                         ('published', result['url'], datetime.now().isoformat(), post['id']))
     conn.commit()
     conn.close()
@@ -201,59 +340,7 @@ if __name__ == '__main__':
     init_db()
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_scheduled_posts, 'interval', minutes=1)
+    scheduler.add_job(run_auto_tasks, 'cron', hour=9, minute=0)  # 매일 오전 9시
     scheduler.start()
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-# ── 인게이저 API ──
-from engager import auto_like, auto_comment, auto_neighbor, auto_engage
-
-@app.route('/api/engage/like', methods=['POST'])
-def engage_like():
-    data = request.json
-    conn = get_db()
-    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
-    conn.close()
-    if not account:
-        return jsonify({"success": False, "message": "계정 없음"})
-    result = auto_like(account['naver_id'], account['naver_pw'],
-                       data.get('target', 'neighbor'), data.get('keyword', ''), data.get('count', 10))
-    return jsonify(result)
-
-@app.route('/api/engage/comment', methods=['POST'])
-def engage_comment():
-    data = request.json
-    conn = get_db()
-    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
-    conn.close()
-    if not account:
-        return jsonify({"success": False, "message": "계정 없음"})
-    result = auto_comment(account['naver_id'], account['naver_pw'],
-                          data.get('target', 'neighbor'), data.get('keyword', ''),
-                          data.get('count', 5), data.get('tone', 'friendly'), data.get('custom_comment', ''))
-    return jsonify(result)
-
-@app.route('/api/engage/neighbor', methods=['POST'])
-def engage_neighbor():
-    data = request.json
-    conn = get_db()
-    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
-    conn.close()
-    if not account:
-        return jsonify({"success": False, "message": "계정 없음"})
-    result = auto_neighbor(account['naver_id'], account['naver_pw'],
-                           data.get('keyword', ''), data.get('count', 10), data.get('message', ''))
-    return jsonify(result)
-
-@app.route('/api/engage/engage', methods=['POST'])
-def engage_all():
-    data = request.json
-    conn = get_db()
-    account = conn.execute('SELECT * FROM accounts WHERE id = ?', (data['account_id'],)).fetchone()
-    conn.close()
-    if not account:
-        return jsonify({"success": False, "message": "계정 없음"})
-    result = auto_engage(account['naver_id'], account['naver_pw'],
-                         data.get('target', 'neighbor'), data.get('keyword', ''),
-                         data.get('like_count', 10), data.get('comment_count', 5), data.get('tone', 'friendly'))
-    return jsonify(result)
