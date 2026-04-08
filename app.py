@@ -6,7 +6,7 @@ from blogger import publish_post
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
-DB = "blog.db"
+DB = "/app/data/blog.db"
 
 def init_db():
     conn = sqlite3.connect(DB)
