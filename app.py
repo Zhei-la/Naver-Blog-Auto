@@ -27,6 +27,7 @@ def init_db():
         auto_neighbor_count INTEGER DEFAULT 5,
         auto_target TEXT DEFAULT 'neighbor',
         auto_keyword TEXT DEFAULT '',
+        keywords TEXT DEFAULT '[]',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS posts (
@@ -77,16 +78,18 @@ def get_accounts():
 def add_account():
     d = request.json
     conn = get_db()
+    import json as _json
     conn.execute('''INSERT INTO accounts 
         (client_name, naver_id, naver_pw, blog_type,
          auto_like, auto_comment, auto_neighbor,
          auto_like_count, auto_comment_count, auto_neighbor_count,
-         auto_target, auto_keyword)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+         auto_target, auto_keyword, keywords)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
         (d['client_name'], d['naver_id'], d['naver_pw'], d.get('blog_type','info'),
          d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
          d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
-         d.get('auto_target','neighbor'), d.get('auto_keyword','')))
+         d.get('auto_target','neighbor'), d.get('auto_keyword',''),
+         _json.dumps(d.get('keywords',[]))))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -95,13 +98,17 @@ def add_account():
 def update_account(aid):
     d = request.json
     conn = get_db()
+    import json as _json
     conn.execute('''UPDATE accounts SET
+        client_name=?, naver_id=?, blog_type=?,
         auto_like=?, auto_comment=?, auto_neighbor=?,
         auto_like_count=?, auto_comment_count=?, auto_neighbor_count=?,
-        auto_target=?, auto_keyword=? WHERE id=?''',
-        (d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
+        auto_target=?, auto_keyword=?, keywords=? WHERE id=?''',
+        (d.get('client_name',''), d.get('naver_id',''), d.get('blog_type','info'),
+         d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
          d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
-         d.get('auto_target','neighbor'), d.get('auto_keyword',''), aid))
+         d.get('auto_target','neighbor'), d.get('auto_keyword',''),
+         _json.dumps(d.get('keywords',[])), aid))
     conn.commit()
     conn.close()
     return jsonify({"success": True})

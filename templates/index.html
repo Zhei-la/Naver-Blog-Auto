@@ -256,7 +256,18 @@ tr:hover td { background:var(--s2); }
               <option value="listicle">📋 리스트형</option>
               <option value="story">💬 스토리텔링</option>
               <option value="compare">⚖️ 비교형</option>
+              <option value="place">📍 맛집/장소 소개</option>
+              <option value="news">📰 뉴스/트렌드</option>
+              <option value="tutorial">🔧 사용법/튜토리얼</option>
+              <option value="ranking">🏆 랭킹/추천</option>
+              <option value="interview">🎤 인터뷰/후기</option>
             </select>
+          </div>
+          <div class="fg">
+            <div class="toggle-row" style="padding:0;border:none;">
+              <span class="toggle-label" style="font-size:12px;">📍 업체 정보 포함 (맛집/홍보글)</span>
+              <div class="toggle" id="tog-place" onclick="togglePlaceInfo()"></div>
+            </div>
           </div>
           <div class="fg"><label class="fl">추가 요청 (선택)</label><textarea id="gen-prompt" placeholder="예: 20대 직장인 타겟, 제품 3개 비교해줘" style="min-height:60px;"></textarea></div>
           <div class="col2">
@@ -290,6 +301,26 @@ tr:hover td { background:var(--s2); }
           <div class="fg"><label class="fl">CTA 문구</label><input type="text" id="gen-cta-text" placeholder="예: 지금 바로 확인하기 →" /></div>
           <div class="fg"><label class="fl">CPA 링크 (제휴)</label><input type="text" id="gen-cpa-link" placeholder="https://affiliate.example.com" /></div>
           <div class="fg"><label class="fl">CPS 링크 (쇼핑)</label><input type="text" id="gen-cps-link" placeholder="https://shop.example.com" /></div>
+        </div>
+        <div class="card" id="place-info-card" style="display:none;">
+          <div class="card-title">📍 업체 정보 (맛집/홍보 글용)</div>
+          <div class="col2">
+            <div class="fg"><label class="fl">업체명</label><input type="text" id="place-name" placeholder="예: 강남 스타벅스" /></div>
+            <div class="fg"><label class="fl">전화번호</label><input type="text" id="place-phone" placeholder="예: 02-1234-5678" /></div>
+          </div>
+          <div class="fg"><label class="fl">주소</label><input type="text" id="place-address" placeholder="예: 서울시 강남구 테헤란로 123" /></div>
+          <div class="col2">
+            <div class="fg"><label class="fl">영업시간</label><input type="text" id="place-hours" placeholder="예: 09:00 - 22:00" /></div>
+            <div class="fg"><label class="fl">가격대</label><input type="text" id="place-price" placeholder="예: 1만원대" /></div>
+          </div>
+          <div class="fg"><label class="fl">주차</label><input type="text" id="place-parking" placeholder="예: 건물 내 주차 가능" /></div>
+          <div class="fg"><label class="fl">업체 정보 삽입 위치</label>
+            <div class="target-opts">
+              <div class="target-opt" id="pos-top" onclick="selectPlacePos('top')">글 상단</div>
+              <div class="target-opt" id="pos-middle" onclick="selectPlacePos('middle')">글 중간</div>
+              <div class="target-opt selected" id="pos-bottom" onclick="selectPlacePos('bottom')">글 하단</div>
+            </div>
+          </div>
         </div>
         <div class="card">
           <div class="card-title">발행 설정</div>
@@ -328,13 +359,23 @@ tr:hover td { background:var(--s2); }
       <div class="card">
         <div class="card-title">대량 글 생성 설정</div>
         <div class="fg"><label class="fl">계정 선택 (여러 개 가능)</label><div id="bulk-accounts"></div></div>
-        <div class="fg"><label class="fl">키워드</label><input type="text" id="bulk-keyword" placeholder="예: 강남 맛집 추천" /></div>
+        <div class="fg">
+          <label class="fl">키워드</label>
+          <div class="btn-row" style="margin-bottom:5px;">
+            <input type="text" id="bulk-keyword" placeholder="예: 강남 맛집 추천" style="flex:1;" />
+            <button class="btn btn-ghost btn-sm" onclick="suggestBulkKeyword()">🔍 AI 추천</button>
+          </div>
+          <div id="bulk-kw-suggestions" class="kw-tags"></div>
+        </div>
         <div class="fg"><label class="fl">글 형식</label>
           <select id="bulk-style">
             <option value="info">📚 정보성 글</option>
             <option value="review">⭐ 후기/리뷰</option>
             <option value="listicle">📋 리스트형</option>
             <option value="story">💬 스토리텔링</option>
+            <option value="compare">⚖️ 비교형</option>
+            <option value="place">📍 맛집/장소 소개</option>
+            <option value="ranking">🏆 랭킹/추천</option>
           </select>
         </div>
         <div class="pub-opts" style="margin-bottom:10px;">
@@ -592,6 +633,46 @@ tr:hover td { background:var(--s2); }
     </div>
   </div>
 </div>
+
+<!-- 포스트 수정 모달 -->
+<div class="modal-bg" id="modal-edit-post">
+  <div class="modal" style="width:700px;max-width:95vw;">
+    <div class="modal-title">포스트 수정</div>
+    <input type="hidden" id="edit-post-id" />
+    <div class="fg"><label class="fl">제목</label><input type="text" id="edit-post-title" /></div>
+    <div class="fg"><label class="fl">본문</label><textarea id="edit-post-body" style="min-height:300px;"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-post')">취소</button>
+      <button class="btn btn-primary" onclick="saveEditPost()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 대량 발행 결과 미리보기 모달 -->
+<div class="modal-bg" id="modal-bulk-preview">
+  <div class="modal" style="width:700px;max-width:95vw;">
+    <div class="modal-title">포스트 미리보기</div>
+    <div class="fg"><label class="fl">제목</label><div id="bulk-preview-title" style="font-weight:700;font-size:15px;padding:8px 0;"></div></div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:16px;max-height:400px;overflow-y:auto;font-size:13px;line-height:1.8;white-space:pre-wrap;" id="bulk-preview-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-bulk-preview')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 포스트 수정/보기 모달 -->
+<div class="modal-bg" id="modal-post-edit">
+  <div class="modal" style="width:640px;">
+    <div class="modal-title">포스트 수정</div>
+    <input type="hidden" id="edit-post-id" />
+    <div class="fg"><label class="fl">제목</label><input type="text" id="edit-post-title" /></div>
+    <div class="fg"><label class="fl">본문</label><textarea id="edit-post-body" style="min-height:300px;"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-post-edit')">취소</button>
+      <button class="btn btn-primary" onclick="savePostEdit()">저장</button>
+    </div>
+  </div>
+</div>
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
@@ -708,7 +789,7 @@ async function loadAccounts() {
   const el = document.getElementById('accountsTable');
   if (!accounts.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div>'; return; }
   const typeNames = { monetize:'💰 수익화', ads:'📢 광고형', daily:'📖 일상', business:'🏪 사업체', info:'📚 정보성' };
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>블로그 타입</th><th>자동화</th><th>등록일</th><th>액션</th></tr></thead><tbody>'
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>블로그 타입</th><th>키워드</th><th>자동화</th><th>등록일</th><th>액션</th></tr></thead><tbody>'
     + accounts.map(a => `<tr>
       <td><strong>${a.client_name}</strong></td>
       <td style="font-family:monospace;">${a.naver_id}</td>
@@ -806,7 +887,9 @@ async function generatePost() {
     place_name: document.getElementById('gen-place').value,
     word_count: parseInt(document.getElementById('gen-wordcount').value),
     image_count: parseInt(document.getElementById('gen-imgcount').value),
-    image_base64, image_type };
+    image_base64, image_type,
+    place_info: getPlaceInfo(),
+    place_position: placePosition };
   if (pubOpt === 'schedule') payload.scheduled_at = document.getElementById('gen-scheduled-at').value;
   try {
     const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
@@ -870,9 +953,12 @@ async function runBulk() {
     const data = await res.json();
     const el = document.getElementById('bulk-result');
     el.innerHTML = data.results.map(r => `
-      <div class="result-box ${r.success ? 'result-ok' : 'result-err'}" style="margin-bottom:6px;">
-        ${r.success ? '✅' : '❌'} ${r.account} - ${r.success ? r.title : r.message}
-        ${r.success && bulkOpt === 'publish' ? `<button class="btn btn-blue btn-sm" style="margin-left:8px;" onclick="publishDraft(${r.post_id})">발행</button>` : ''}
+      <div class="result-box ${r.success ? 'result-ok' : 'result-err'}" style="margin-bottom:6px;cursor:${r.success?'pointer':'default'};" onclick="${r.success?`openEditPost(${r.post_id})`:''}">
+        ${r.success ? '✅' : '❌'} <strong>${r.account}</strong> - ${r.success ? r.title : r.message}
+        <div style="margin-top:6px;" onclick="event.stopPropagation()">
+          ${r.success ? `<button class="btn btn-blue btn-sm" onclick="publishDraft(${r.post_id})">발행</button>` : ''}
+          ${r.success ? `<button class="btn btn-ghost btn-sm" onclick="openEditPost(${r.post_id})">수정/보기</button>` : ''}
+        </div>
       </div>`).join('');
     toast(`${data.results.filter(r=>r.success).length}개 생성 완료!`, 'success');
   } catch(e) { toast('오류', 'error'); }
@@ -893,6 +979,7 @@ async function loadPosts() {
       <td style="color:var(--dim);">${p.blog_type||'info'}</td><td>${sb(p.status)}</td>
       <td style="color:var(--dim);">${(p.created_at||'').slice(0,10)}</td>
       <td><div class="btn-row">${p.status!=='published'?`<button class="btn btn-blue btn-sm" onclick="publishDraft(${p.id})">발행</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="openEditPost(${p.id},\`${p.title}\`,\`${(p.body||'').slice(0,100)}\`)">수정</button>
       ${p.published_url?`<a href="${p.published_url}" target="_blank" class="btn btn-ghost btn-sm">보기</a>`:''}
       <button class="btn btn-danger btn-sm" onclick="deletePost(${p.id})">삭제</button></div></td></tr>`).join('')
     + '</tbody></table></div>';
@@ -1150,6 +1237,9 @@ function openEditAccount(id) {
   document.getElementById('eauto-' + eTarget).classList.add('selected');
   document.getElementById('eauto-kw-wrap').style.display = (eTarget==='keyword'||eTarget==='both') ? 'block' : 'none';
   document.getElementById('eauto-keyword').value = acc.auto_keyword || '';
+  // 키워드 목록 로드
+  try { editKws = JSON.parse(acc.keywords || '[]'); } catch(e) { editKws = []; }
+  renderEditKws();
   openModal('modal-edit-account');
 }
 
@@ -1168,6 +1258,8 @@ async function saveEdit() {
     auto_target: eTarget, auto_keyword: document.getElementById('eauto-keyword').value
   };
   if (pw) payload.naver_pw = pw;
+  payload.keywords = editKws;
+  if (pw) payload.naver_pw = pw;
   await fetch('/api/accounts/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
   toast('저장됐어요!', 'success');
   closeModal('modal-edit-account');
@@ -1184,6 +1276,211 @@ function previewUploadedImage() {
        <div style="font-size:11px;color:var(--dim);margin-top:4px;">✅ ${file.name} - AI가 이미지를 인식해서 글에 반영해요</div>`;
   };
   reader.readAsDataURL(file);
+}
+
+
+// 계정 추가 모달 키워드
+let accKws = [];
+let editKws = [];
+
+function addAccKw() {
+  const input = document.getElementById('acc-kw-input');
+  const kw = input.value.trim();
+  if (!kw) return;
+  if (!accKws.includes(kw)) { accKws.push(kw); renderAccKws(); }
+  input.value = '';
+}
+
+function removeAccKw(kw) {
+  accKws = accKws.filter(k => k !== kw);
+  renderAccKws();
+}
+
+function renderAccKws() {
+  document.getElementById('acc-kw-list').innerHTML = accKws.map(kw =>
+    `<div class="kw-tag" onclick="removeAccKw('${kw}')">${kw} ✕</div>`
+  ).join('');
+}
+
+async function autoSuggestAccKw() {
+  const blogType = selectedBlogType || 'info';
+  const clientName = document.getElementById('acc-name').value.trim();
+  if (!clientName) { toast('고객명을 먼저 입력해줘!', 'error'); return; }
+  const container = document.getElementById('acc-kw-list');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({topic: clientName, blog_type: blogType, count: 8})});
+    const data = await res.json();
+    if (data.success) {
+      accKws = [...new Set([...accKws, ...data.keywords])];
+      renderAccKws();
+      toast('키워드 추천됐어요!', 'success');
+    }
+  } catch(e) { toast('추천 실패', 'error'); renderAccKws(); }
+}
+
+// 계정 수정 모달 키워드
+function addEditKw() {
+  const input = document.getElementById('edit-kw-input');
+  const kw = input.value.trim();
+  if (!kw) return;
+  if (!editKws.includes(kw)) { editKws.push(kw); renderEditKws(); }
+  input.value = '';
+}
+
+function removeEditKw(kw) {
+  editKws = editKws.filter(k => k !== kw);
+  renderEditKws();
+}
+
+function renderEditKws() {
+  document.getElementById('edit-kw-list').innerHTML = editKws.map(kw =>
+    `<div class="kw-tag" onclick="removeEditKw('${kw}')">${kw} ✕</div>`
+  ).join('');
+}
+
+async function autoSuggestEditKw() {
+  const blogType = eBlogType || 'info';
+  const clientName = document.getElementById('edit-acc-name').value.trim();
+  if (!clientName) { toast('고객명을 먼저 입력해줘!', 'error'); return; }
+  const container = document.getElementById('edit-kw-list');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({topic: clientName, blog_type: blogType, count: 8})});
+    const data = await res.json();
+    if (data.success) {
+      editKws = [...new Set([...editKws, ...data.keywords])];
+      renderEditKws();
+      toast('키워드 추천됐어요!', 'success');
+    }
+  } catch(e) { toast('추천 실패', 'error'); renderEditKws(); }
+}
+
+
+// 업체 정보 토글
+let placeEnabled = false;
+let placePosition = 'bottom';
+
+function togglePlaceInfo() {
+  placeEnabled = !placeEnabled;
+  document.getElementById('tog-place').classList.toggle('on', placeEnabled);
+  document.getElementById('place-info-card').style.display = placeEnabled ? 'block' : 'none';
+}
+
+function selectPlacePos(pos) {
+  placePosition = pos;
+  ['top','middle','bottom'].forEach(p => document.getElementById('pos-' + p).classList.remove('selected'));
+  document.getElementById('pos-' + pos).classList.add('selected');
+}
+
+function getPlaceInfo() {
+  if (!placeEnabled) return null;
+  return {
+    name: document.getElementById('place-name').value.trim(),
+    phone: document.getElementById('place-phone').value.trim(),
+    address: document.getElementById('place-address').value.trim(),
+    hours: document.getElementById('place-hours').value.trim(),
+    price: document.getElementById('place-price').value.trim(),
+    parking: document.getElementById('place-parking').value.trim(),
+  };
+}
+
+
+// 포스트 수정 모달
+function openEditPost(id, title, bodyPreview) {
+  const newTitle = prompt('제목 수정:', title);
+  if (newTitle === null) return;
+  // 본문 수정은 별도 모달로
+  openModal('modal-edit-post');
+  document.getElementById('edit-post-id').value = id;
+  document.getElementById('edit-post-title').value = title;
+  // 본문 로드
+  fetch('/api/posts?account_id=').then(r=>r.json()).then(posts => {
+    const post = posts.find(p => p.id == id);
+    if (post) document.getElementById('edit-post-body').value = post.body || '';
+  });
+}
+
+async function saveEditPost() {
+  const id = document.getElementById('edit-post-id').value;
+  const title = document.getElementById('edit-post-title').value;
+  const body = document.getElementById('edit-post-body').value;
+  await fetch('/api/posts/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title, body})});
+  toast('수정됐어요!', 'success');
+  closeModal('modal-edit-post');
+  loadPosts();
+}
+
+// 대량 발행 키워드 추천
+async function suggestBulkKeywords() {
+  const topic = document.getElementById('bulk-keyword').value.trim();
+  if (!topic) { toast('키워드 힌트를 입력해줘!', 'error'); return; }
+  const container = document.getElementById('bulk-kw-tags');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({topic, blog_type: 'info', count: 6})});
+    const data = await res.json();
+    if (data.success) {
+      container.innerHTML = data.keywords.map(kw =>
+        `<div class="kw-tag" onclick="document.getElementById('bulk-keyword').value='${kw}';document.getElementById('bulk-kw-tags').innerHTML=''">${kw}</div>`
+      ).join('');
+    }
+  } catch(e) { toast('추천 실패', 'error'); container.innerHTML = ''; }
+}
+
+// 대량 발행 결과 클릭해서 보기
+function showBulkResult(postId, title, body) {
+  document.getElementById('bulk-preview-title').textContent = title;
+  document.getElementById('bulk-preview-body').textContent = body;
+  openModal('modal-bulk-preview');
+}
+
+
+// 포스트 수정
+let allPosts = [];
+
+async function openEditPost(postId) {
+  const res = await fetch('/api/posts');
+  allPosts = await res.json();
+  const post = allPosts.find(p => p.id === postId);
+  if (!post) return;
+  document.getElementById('edit-post-id').value = post.id;
+  document.getElementById('edit-post-title').value = post.title;
+  document.getElementById('edit-post-body').value = post.body;
+  openModal('modal-post-edit');
+}
+
+async function viewPost(postId) {
+  openEditPost(postId);
+}
+
+async function savePostEdit() {
+  const id = document.getElementById('edit-post-id').value;
+  const title = document.getElementById('edit-post-title').value.trim();
+  const body = document.getElementById('edit-post-body').value.trim();
+  if (!title) { toast('제목을 입력해주세요', 'error'); return; }
+  await fetch('/api/posts/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title, body})});
+  toast('저장됐어요!', 'success');
+  closeModal('modal-post-edit');
+  loadPosts();
+}
+
+async function suggestBulkKeyword() {
+  const kw = document.getElementById('bulk-keyword').value.trim();
+  if (!kw) { toast('키워드 힌트를 먼저 입력해줘!', 'error'); return; }
+  const container = document.getElementById('bulk-kw-suggestions');
+  container.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/keywords', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({topic: kw, blog_type: 'info', count: 5})});
+    const data = await res.json();
+    if (data.success) {
+      container.innerHTML = data.keywords.map(k => `<div class="kw-tag" onclick="document.getElementById('bulk-keyword').value='${k}';document.getElementById('bulk-kw-suggestions').innerHTML=''">${k}</div>`).join('');
+    }
+  } catch(e) { toast('추천 실패', 'error'); container.innerHTML = ''; }
 }
 
 loadAccountsData(); loadDashboard();
