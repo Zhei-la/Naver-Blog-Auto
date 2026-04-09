@@ -274,6 +274,16 @@ async def on_message(message):
 
     if intent["intent"] == "stats":
         accounts, posts = await get_stats()
+        
+        # 두번째 사이트 통계도 가져오기
+        draft_stats = None
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(f"{BLOG_DRAFT_URL}/api/stats", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    draft_stats = await r.json()
+        except:
+            pass
+        
         if not accounts:
             await message.channel.send("❌ 서버 연결 오류")
             return
@@ -295,6 +305,13 @@ async def on_message(message):
 
         context = f"계정 {len(accounts)}개, 발행 {len(published)}개"
         comment = await ai_response("report", "현황 보고서를 작성했어. 짧게 분석 코멘트 해줘.", context)
+        # 두번째 사이트 통계 추가
+        if draft_stats:
+            embed.add_field(name="─────────────", value="📊 원고 생성기 통계", inline=False)
+            embed.add_field(name="오늘 방문자", value=f"**{draft_stats.get('today_visitors', 0)}명**", inline=True)
+            embed.add_field(name="쿠팡 클릭", value=f"**{draft_stats.get('today_coupang_clicks', 0)}회**", inline=True)
+            embed.add_field(name="차단 IP", value=f"**{draft_stats.get('blocked_ips', 0)}개**", inline=True)
+        
         embed.set_footer(text=comment)
         await message.channel.send(embed=embed)
 
