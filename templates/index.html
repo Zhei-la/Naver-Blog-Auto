@@ -231,6 +231,9 @@ tr:hover td { background:var(--s2); }
       <div class="page-title">계정 <span>관리</span></div>
       <button class="btn btn-primary" onclick="openModal('modal-account')">+ 계정 추가</button>
     </div>
+    <div style="margin-bottom:14px;">
+      <input type="text" id="account-search" placeholder="고객명 또는 네이버 ID로 검색" oninput="searchAccounts()" style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit;" />
+    </div>
     <div class="card">
       <div id="accountsTable"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">등록된 계정이 없어요</div></div></div>
     </div>
@@ -1062,7 +1065,7 @@ async function loadAccounts() {
       <td>${typeNames[a.blog_type] || a.blog_type}</td>
       <td style="font-size:11px;">${a.auto_like?'❤️':''} ${a.auto_comment?'💬':''} ${a.auto_neighbor?'👥':''}</td>
       <td style="color:var(--dim);">${(a.created_at||'').slice(0,10)}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">삭제</button></td>
+      <td><div class="btn-row"><button class="btn btn-ghost btn-sm" onclick="openEditAccount(${a.id})">수정</button><button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">삭제</button></div></td>
     </tr>`).join('')
     + '</tbody></table></div>';
 }
@@ -2089,7 +2092,11 @@ async function loadIPManager() {
   // 토큰 없으면 로그인 먼저
   if (!draftAdminToken) {
     const pw = prompt('원고 작성기 관리자 비밀번호를 입력하세요:');
-    if (!pw) return;
+    if (pw === null || pw === '') {
+      toast('비밀번호를 입력해야 접근할 수 있어요', 'error');
+      showPage('dashboard');
+      return;
+    }
     try {
       const res = await fetch(DRAFT_URL + '/api/security/auth', {
         method: 'POST',
@@ -2205,7 +2212,10 @@ let cafeAdminToken = '';
 async function loadCafeIPManager() {
   if (!cafeAdminToken) {
     const pw = prompt('카페 원고 작성기 관리자 비밀번호:');
-    if (!pw) return;
+    if (pw === null || pw === '') {
+      toast('비밀번호를 입력해야 접근할 수 있어요', 'error');
+      return;
+    }
     try {
       const res = await fetch(CAFE_URL + '/api/security/auth', {
         method: 'POST',
@@ -2299,6 +2309,37 @@ async function unblockCafeIP(ip) {
   });
   toast('차단 해제됐어요!', 'success');
   loadCafeIPManager();
+}
+
+
+function searchAccounts() {
+  const q = document.getElementById('account-search').value.trim().toLowerCase();
+  const filtered = q ? accounts.filter(a =>
+    a.client_name.toLowerCase().includes(q) ||
+    a.naver_id.toLowerCase().includes(q)
+  ) : accounts;
+  renderAccountTable(filtered);
+}
+
+function renderAccountTable(list) {
+  const typeNames = {monetize:'💰 수익화', ads:'📢 광고형', daily:'📖 일상', business:'🏪 사업체', info:'📚 정보성'};
+  const el = document.getElementById('accountTable');
+  if (!list || !list.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">검색 결과가 없어요</div></div>';
+    return;
+  }
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>고객명</th><th>네이버 ID</th><th>등급</th><th>블로그 타입</th><th>키워드</th><th>자동화</th><th>등록일</th><th>액션</th></tr></thead><tbody>'
+    + list.map(a => `<tr>
+      <td><strong>${a.client_name}</strong></td>
+      <td style="font-family:monospace;">${a.naver_id}</td>
+      <td>${{basic:"🥉 베이직",pro:"🥈 프로",premium:"🥇 프리미엄"}[a.grade]||"🥉 베이직"}</td>
+      <td>${typeNames[a.blog_type] || a.blog_type}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--dim);font-size:11px;">${(() => { try { return JSON.parse(a.keywords||'[]').slice(0,3).join(', ') || '-'; } catch(e) { return '-'; } })()}</td>
+      <td style="font-size:11px;">${a.auto_like?'❤️':''} ${a.auto_comment?'💬':''} ${a.auto_neighbor?'👥':''}</td>
+      <td style="color:var(--dim);">${(a.created_at||'').slice(0,10)}</td>
+      <td><div class="btn-row"><button class="btn btn-ghost btn-sm" onclick="openEditAccount(${a.id})">수정</button><button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">삭제</button></div></td>
+    </tr>`).join('')
+    + '</tbody></table></div>';
 }
 
 loadAccountsData(); loadDashboard();
