@@ -560,3 +560,95 @@ def publish_from_template(tid):
     conn.commit()
     conn.close()
     return jsonify({"success": True, "results": results})
+
+# ── 보안 관리 페이지 ──
+import hashlib, secrets
+from datetime import datetime as dt
+
+# 보안 데이터 저장 (메모리 + DB 혼용)
+security_blocked = {}  # ip -> {reason, time}
+security_logs = []     # [{time, ip, type, detail}]
+admin_tokens = set()
+
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", os.getenv("DASHBOARD_PASSWORD", "admin1234"))
+
+def get_security_db():
+    conn = get_db()
+    conn.execute('''CREATE TABLE IF NOT EXISTS blocked_ips (
+        ip TEXT PRIMARY KEY,
+        reason TEXT DEFAULT '수동 차단',
+        blocked_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS security_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT,
+        type TEXT,
+        detail TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.commit()
+    return conn
+
+@app.route('/security')
+def security_page():
+    return render_template('security_admin.html')
+
+@app.route('/api/security/auth', methods=['POST'])
+def security_auth():
+    d = request.json
+    pw = d.get('password', '')
+    if hashlib.sha256(pw.encode()).hexdigest() == hashlib.sha256(ADMIN_PASSWORD.encode()).hexdigest():
+        token = secrets.token_hex(32)
+        admin_tokens.add(token)
+        return jsonify({"success": True, "token": token})
+    return jsonify({"success": False})
+
+def check_admin(req):
+    return req.headers.get('X-Admin-Token') in admin_tokens
+
+@app.route('/api/security/admin', methods=['GET'])
+def security_admin():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    conn = get_security_db()
+    blocked = conn.execute('SELECT * FROM blocked_ips ORDER BY blocked_at DESC').fetchall()
+    logs = conn.execute('SELECT * FROM security_logs ORDER BY created_at DESC LIMIT 100').fetchall()
+    conn.close()
+    return jsonify({
+        "success": True,
+        "blocked_count": len(blocked),
+        "blocked_ips": [{"ip": b["ip"], "reason": b["reason"], "time": b["blocked_at"]} for b in blocked],
+        "security_logs": [{"ip": l["ip"], "type": l["type"], "detail": l["detail"], "time": l["created_at"]} for l in logs],
+        "total_requests": len(logs)
+    })
+
+@app.route('/api/security/block', methods=['POST'])
+def block_ip():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    d = request.json
+    ip = d.get('ip', '').strip()
+    reason = d.get('reason', '수동 차단')
+    if not ip:
+        return jsonify({"success": False})
+    conn = get_security_db()
+    conn.execute('INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_at) VALUES (?,?,?)',
+                 (ip, reason, dt.now().strftime('%Y-%m-%d %H:%M:%S')))
+    conn.execute('INSERT INTO security_logs (ip, type, detail) VALUES (?,?,?)',
+                 (ip, '수동 차단', f'관리자가 {ip} 차단'))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/security/unblock', methods=['POST'])
+def unblock_ip():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    ip = request.json.get('ip', '').strip()
+    conn = get_security_db()
+    conn.execute('DELETE FROM blocked_ips WHERE ip=?', (ip,))
+    conn.execute('INSERT INTO security_logs (ip, type, detail) VALUES (?,?,?)',
+                 (ip, '차단 해제', f'관리자가 {ip} 차단 해제'))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})

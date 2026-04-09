@@ -194,6 +194,7 @@ tr:hover td { background:var(--s2); }
     <div class="nav-item" onclick="showPage('schedule')" data-page="schedule">⏰ 자동 발행 설정</div>
     <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
     <div class="nav-item" onclick="showPage('insight')" data-page="insight">📈 인사이트</div>
+    <div class="nav-item" onclick="showPage('ip-manager')" data-page="ip-manager">🚫 IP 차단 관리</div>
     <div class="nav-section">마케팅 자동화</div>
     <div class="nav-item" onclick="showPage('like')" data-page="like">❤️ 공감</div>
     <div class="nav-item" onclick="showPage('comment')" data-page="comment">💬 댓글</div>
@@ -596,6 +597,42 @@ tr:hover td { background:var(--s2); }
       </div>
     </div>
   </div>
+
+  <!-- IP 차단 관리 -->
+  <div class="page" id="page-ip-manager">
+    <div class="page-header">
+      <div class="page-title">IP 차단 <span>관리</span></div>
+      <button class="btn btn-primary" onclick="loadIPManager()">🔄 새로고침</button>
+    </div>
+
+    <!-- 원고 작성기 보안 -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">📝 원고 작성기 보안 현황
+        <span id="draft-status-badge" class="badge bg">확인 중...</span>
+      </div>
+      <div class="stats-row" style="margin-bottom:14px;">
+        <div class="stat-card"><div class="stat-val" id="draft-blocked-count" style="color:var(--red);">-</div><div class="stat-lbl">차단된 IP</div></div>
+        <div class="stat-card"><div class="stat-val" id="draft-visitors" style="color:var(--green);">-</div><div class="stat-lbl">오늘 방문자</div></div>
+        <div class="stat-card"><div class="stat-val" id="draft-coupang" style="color:var(--yellow);">-</div><div class="stat-lbl">쿠팡 클릭</div></div>
+      </div>
+
+      <!-- IP 직접 차단 -->
+      <div class="card-title" style="font-size:13px;">🚫 IP 차단 추가</div>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <input type="text" id="block-ip-input" placeholder="차단할 IP 입력 (예: 192.168.1.1)" style="flex:1;font-family:monospace;" />
+        <input type="text" id="block-ip-reason" placeholder="사유" style="width:140px;" />
+        <button class="btn btn-danger btn-sm" onclick="blockDraftIP()">차단</button>
+      </div>
+
+      <!-- 차단된 IP 목록 -->
+      <div class="card-title" style="font-size:13px;">차단된 IP 목록</div>
+      <div id="draft-blocked-list"><div class="empty"><div class="empty-icon">✅</div><div class="empty-text">차단된 IP가 없습니다</div></div></div>
+
+      <!-- 보안 로그 -->
+      <div class="card-title" style="font-size:13px;margin-top:16px;">📋 보안 이벤트 로그</div>
+      <div id="draft-security-logs"><div class="empty"><div class="empty-text">로그 없음</div></div></div>
+    </div>
+  </div>
 </main>
 </div>
 
@@ -894,6 +931,7 @@ function showPage(name) {
   if (name === 'posts') loadPosts();
   if (name === 'schedule') loadSchedules();
   if (name === 'template') { loadTemplates(); loadAccountsData(); }
+  if (name === 'ip-manager') loadIPManager();
   if (name === 'insight') { loadAccountsData(); const sel = document.getElementById('insight-account'); if (!sel.options.length || sel.options[0].value === '') { const first = sel.options[0]; sel.innerHTML = ''; sel.appendChild(first); accounts.forEach(a => { const o = document.createElement('option'); o.value=a.id; o.textContent=a.client_name+' ('+a.naver_id+')'; sel.appendChild(o); }); } }
   if (name === 'bulk') renderBulkAccounts();
 }
@@ -2015,6 +2053,121 @@ async function deleteTemplateById(id) {
   await fetch('/api/templates/' + id, {method:'DELETE'});
   toast('삭제됨', 'success');
   loadTemplates();
+}
+
+
+// IP 차단 관리
+const DRAFT_URL = 'https://blog-draft-production.up.railway.app';
+let draftAdminToken = '';
+
+async function loadIPManager() {
+  // 토큰 없으면 로그인 먼저
+  if (!draftAdminToken) {
+    const pw = prompt('원고 작성기 관리자 비밀번호를 입력하세요:');
+    if (!pw) return;
+    try {
+      const res = await fetch(DRAFT_URL + '/api/security/auth', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({password: pw})
+      });
+      const data = await res.json();
+      if (!data.success) { toast('비밀번호가 틀렸어요', 'error'); return; }
+      draftAdminToken = data.token;
+    } catch(e) { toast('서버 연결 실패', 'error'); return; }
+  }
+  
+  // 보안 데이터 로드
+  try {
+    const res = await fetch(DRAFT_URL + '/api/security/admin', {
+      headers: {'X-Admin-Token': draftAdminToken}
+    });
+    if (res.status === 401) { draftAdminToken = ''; loadIPManager(); return; }
+    const data = await res.json();
+    
+    // 통계 업데이트
+    document.getElementById('draft-blocked-count').textContent = data.blocked_count || 0;
+    const badge = document.getElementById('draft-status-badge');
+    if (data.blocked_count > 0) {
+      badge.textContent = '경고';
+      badge.className = 'badge by';
+    } else {
+      badge.textContent = '정상';
+      badge.className = 'badge bg';
+    }
+    
+    // 통계도 가져오기
+    try {
+      const sres = await fetch(DRAFT_URL + '/api/stats');
+      const stats = await sres.json();
+      document.getElementById('draft-visitors').textContent = stats.today_visitors || 0;
+      document.getElementById('draft-coupang').textContent = stats.today_coupang_clicks || 0;
+    } catch(e) {}
+    
+    // 차단된 IP 목록
+    const blocked = data.blocked_ips || [];
+    const blockedEl = document.getElementById('draft-blocked-list');
+    if (!blocked.length) {
+      blockedEl.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">차단된 IP가 없습니다</div></div>';
+    } else {
+      blockedEl.innerHTML = '<div class="table-wrap"><table><thead><tr><th>IP 주소</th><th>사유</th><th>차단 시각</th><th>액션</th></tr></thead><tbody>'
+        + blocked.map(b => `<tr>
+          <td style="font-family:monospace;color:var(--yellow);">${b.ip}</td>
+          <td style="color:var(--dim);">${b.reason || '자동 차단'}</td>
+          <td style="color:var(--dim);font-size:11px;">${(b.time||'').slice(0,16)}</td>
+          <td><button class="btn btn-ghost btn-sm" style="color:var(--green);border-color:var(--green);" onclick="unblockDraftIP('${b.ip}')">해제</button></td>
+        </tr>`).join('')
+        + '</tbody></table></div>';
+    }
+    
+    // 보안 로그
+    const logs = data.security_logs || [];
+    const logEl = document.getElementById('draft-security-logs');
+    if (!logs.length) {
+      logEl.innerHTML = '<div class="empty"><div class="empty-text">로그 없음</div></div>';
+    } else {
+      logEl.innerHTML = '<div class="table-wrap"><table><thead><tr><th>시각</th><th>IP</th><th>유형</th><th>내용</th></tr></thead><tbody>'
+        + logs.slice(0, 30).map(l => `<tr>
+          <td style="font-size:11px;color:var(--dim);">${(l.time||'').slice(0,16)}</td>
+          <td style="font-family:monospace;color:var(--yellow);font-size:12px;">${l.ip}</td>
+          <td><span class="badge by" style="font-size:10px;">${l.type}</span></td>
+          <td style="font-size:12px;color:var(--dim);">${l.detail}</td>
+        </tr>`).join('')
+        + '</tbody></table></div>';
+    }
+    
+    toast('업데이트됐어요!', 'success');
+  } catch(e) {
+    toast('데이터 로드 실패: ' + e.message, 'error');
+  }
+}
+
+async function blockDraftIP() {
+  const ip = document.getElementById('block-ip-input').value.trim();
+  const reason = document.getElementById('block-ip-reason').value.trim() || '수동 차단';
+  if (!ip) { toast('IP를 입력해주세요', 'error'); return; }
+  if (!draftAdminToken) { await loadIPManager(); return; }
+  
+  await fetch(DRAFT_URL + '/api/security/block', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-Admin-Token': draftAdminToken},
+    body: JSON.stringify({ip, reason})
+  });
+  document.getElementById('block-ip-input').value = '';
+  document.getElementById('block-ip-reason').value = '';
+  toast('차단됐어요!', 'success');
+  loadIPManager();
+}
+
+async function unblockDraftIP(ip) {
+  if (!confirm(ip + ' 차단을 해제할까요?')) return;
+  await fetch(DRAFT_URL + '/api/security/unblock', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-Admin-Token': draftAdminToken},
+    body: JSON.stringify({ip})
+  });
+  toast('차단 해제됐어요!', 'success');
+  loadIPManager();
 }
 
 loadAccountsData(); loadDashboard();

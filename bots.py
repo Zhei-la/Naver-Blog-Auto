@@ -364,7 +364,7 @@ async def on_message(message):
 
     intent = await detect_intent(message.content)
 
-    if intent["intent"] == "chat" and any(kw in message.content for kw in ["보안", "해킹", "안전", "점검", "차단"]):
+    if intent["intent"] in ["security", "error"] or (intent["intent"] == "chat" and any(kw in message.content for kw in ["보안", "해킹", "안전", "점검", "차단", "IP", "ip"])):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{FLASK_URL}/api/security", timeout=aiohttp.ClientTimeout(total=10)) as res:
