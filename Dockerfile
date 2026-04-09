@@ -1,5 +1,4 @@
 FROM python:3.11-slim
-
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -13,15 +12,10 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y google-chrome-stable \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
 RUN pip install webdriver-manager
-
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
-
+RUN pip install --no-cache-dir openai==1.57.0 httpx==0.27.0 --force-reinstall && pip install --no-cache-dir -r requirements.txt
 COPY . .
-
 EXPOSE 5000
 CMD ["python", "app.py"]
-# cache bust Thu Apr  9 10:57:45     2026
