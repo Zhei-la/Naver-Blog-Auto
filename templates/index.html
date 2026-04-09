@@ -2332,7 +2332,7 @@ function renderAccountTable(list) {
     + list.map(a => `<tr>
       <td><strong>${a.client_name}</strong></td>
       <td style="font-family:monospace;">${a.naver_id}</td>
-      <td>${{basic:"🥉 베이직",pro:"🥈 프로",premium:"🥇 프리미엄"}[a.grade]||"🥉 베이직"}</td>
+      <td>${gradeNames[a.grade]||"🥉 베이직"}</td>
       <td>${typeNames[a.blog_type] || a.blog_type}</td>
       <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--dim);font-size:11px;">${(() => { try { return JSON.parse(a.keywords||'[]').slice(0,3).join(', ') || '-'; } catch(e) { return '-'; } })()}</td>
       <td style="font-size:11px;">${a.auto_like?'❤️':''} ${a.auto_comment?'💬':''} ${a.auto_neighbor?'👥':''}</td>
