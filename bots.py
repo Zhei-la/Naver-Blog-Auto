@@ -14,6 +14,7 @@ REPORT_TOKEN = os.getenv("REPORT_BOT_TOKEN")
 ALERT_TOKEN = os.getenv("ALERT_BOT_TOKEN")
 DAILY_TOKEN = os.getenv("DAILY_BOT_TOKEN")
 FLASK_URL = os.getenv("FLASK_URL", "http://localhost:5000")
+BLOG_DRAFT_URL = os.getenv("BLOG_DRAFT_URL", "https://blog-draft-production.up.railway.app")
 CH_ID = int(os.getenv("CH_COMMAND", 0))
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -390,15 +391,32 @@ async def check_health():
     if not channel:
         return
     accounts, posts = await get_stats()
+    errors = []
     if accounts is None:
-        msg = await ai_response("alert", "Flask 서버 연결 실패! 긴급 알림 보내줘")
+        errors.append("네이버 블로그 자동화 서버 연결 실패")
+    
+    # 두번째 사이트 체크
+    try:
+        async with aiohttp.ClientSession() as sess:
+            async with sess.get(f"{BLOG_DRAFT_URL}/api/stats", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                draft_stats = await r.json()
+    except:
+        errors.append("블로그 초안 서버 연결 실패")
+        draft_stats = None
+
+    if errors:
+        msg = await ai_response("alert", f"서버 오류 발생! 오류 목록: {errors}")
         embed = discord.Embed(title="🚨 서버 연결 오류!", description=msg, color=0xff0000, timestamp=datetime.now())
-        embed.add_field(name="오류", value="```Flask 서버에 연결할 수 없습니다```")
-        embed.add_field(name="조치", value="Railway Naver-Blog-Auto 서버 상태 확인")
+        for e in errors:
+            embed.add_field(name="오류", value=f"```{e}```", inline=False)
         await channel.send(embed=embed)
-    else:
-        # 정상 - 조용히 패스 (계정 0개는 정상 상태)
-        pass
+    elif draft_stats:
+        # 두번째 사이트 통계 - 이상 있으면 알림
+        if draft_stats.get("blocked_ips", 0) > 0:
+            embed = discord.Embed(title="⚠️ 보안 경고", color=0xff9800, timestamp=datetime.now())
+            embed.add_field(name="차단된 IP", value=f"{draft_stats['blocked_ips']}개", inline=True)
+            embed.add_field(name="오늘 방문자", value=f"{draft_stats.get('today_visitors',0)}명", inline=True)
+            await channel.send(embed=embed)
 
 @tasks.loop(hours=24)
 async def alert_morning():
@@ -449,6 +467,17 @@ async def security_check():
         status = report.get("status", "알 수 없음")
         issues = report.get("issues", [])
         blocked = report.get("blocked_ips", [])
+        
+        # 두번째 사이트 보안 체크
+        try:
+            async with aiohttp.ClientSession() as sess2:
+                async with sess2.get(f"{BLOG_DRAFT_URL}/api/security", timeout=aiohttp.ClientTimeout(total=10)) as r2:
+                    draft_sec = await r2.json()
+            if draft_sec.get("blocked_count", 0) > 0:
+                issues.append(f"블로그 초안 사이트 차단 IP {draft_sec['blocked_count']}개")
+                status = "경고"
+        except:
+            issues.append("블로그 초안 사이트 보안 점검 실패")
         
         if status == "경고" or issues:
             # 경고 있을 때
