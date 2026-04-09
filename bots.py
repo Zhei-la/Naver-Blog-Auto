@@ -15,6 +15,7 @@ ALERT_TOKEN = os.getenv("ALERT_BOT_TOKEN")
 DAILY_TOKEN = os.getenv("DAILY_BOT_TOKEN")
 FLASK_URL = os.getenv("FLASK_URL", "http://localhost:5000")
 BLOG_DRAFT_URL = os.getenv("BLOG_DRAFT_URL", "https://blog-draft-production.up.railway.app")
+CAFE_DRAFT_URL = os.getenv("CAFE_DRAFT_URL", "https://cafe-draft-production.up.railway.app")
 CH_ID = int(os.getenv("CH_COMMAND", 0))
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -305,12 +306,24 @@ async def on_message(message):
 
         context = f"계정 {len(accounts)}개, 발행 {len(published)}개"
         comment = await ai_response("report", "현황 보고서를 작성했어. 짧게 분석 코멘트 해줘.", context)
-        # 두번째 사이트 통계 추가
+        # 네이버 원고 생성기 통계
         if draft_stats:
-            embed.add_field(name="─────────────", value="📊 원고 생성기 통계", inline=False)
+            embed.add_field(name="─────────────", value="📝 네이버 원고 생성기", inline=False)
             embed.add_field(name="오늘 방문자", value=f"**{draft_stats.get('today_visitors', 0)}명**", inline=True)
             embed.add_field(name="쿠팡 클릭", value=f"**{draft_stats.get('today_coupang_clicks', 0)}회**", inline=True)
             embed.add_field(name="차단 IP", value=f"**{draft_stats.get('blocked_ips', 0)}개**", inline=True)
+        
+        # 카페 원고 생성기 통계
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(f"{CAFE_DRAFT_URL}/api/stats", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    cafe_stats = await r.json()
+            embed.add_field(name="─────────────", value="☕ 카페 원고 생성기", inline=False)
+            embed.add_field(name="오늘 방문자", value=f"**{cafe_stats.get('today_visitors', 0)}명**", inline=True)
+            embed.add_field(name="쿠팡 클릭", value=f"**{cafe_stats.get('today_coupang_clicks', 0)}회**", inline=True)
+            embed.add_field(name="차단 IP", value=f"**{cafe_stats.get('blocked_ips', 0)}개**", inline=True)
+        except:
+            pass
         
         embed.set_footer(text=comment)
         await message.channel.send(embed=embed)

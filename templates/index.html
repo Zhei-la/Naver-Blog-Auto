@@ -187,6 +187,7 @@ tr:hover td { background:var(--s2); }
     <div class="nav-section">메인</div>
     <div class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard">📊 대시보드</div>
     <div class="nav-item" onclick="showPage('accounts')" data-page="accounts">👤 계정 관리</div>
+    <div class="nav-item" onclick="showPage('ip-manager')" data-page="ip-manager">🚫 IP 차단 관리</div>
     <div class="nav-section">글 작성</div>
     <div class="nav-item" onclick="showPage('generate')" data-page="generate">✍️ 글 생성</div>
     <div class="nav-item" onclick="showPage('bulk')" data-page="bulk">📦 대량 발행</div>
@@ -194,7 +195,6 @@ tr:hover td { background:var(--s2); }
     <div class="nav-item" onclick="showPage('schedule')" data-page="schedule">⏰ 자동 발행 설정</div>
     <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
     <div class="nav-item" onclick="showPage('insight')" data-page="insight">📈 인사이트</div>
-    <div class="nav-item" onclick="showPage('ip-manager')" data-page="ip-manager">🚫 IP 차단 관리</div>
     <div class="nav-section">마케팅 자동화</div>
     <div class="nav-item" onclick="showPage('like')" data-page="like">❤️ 공감</div>
     <div class="nav-item" onclick="showPage('comment')" data-page="comment">💬 댓글</div>
@@ -631,6 +631,31 @@ tr:hover td { background:var(--s2); }
       <!-- 보안 로그 -->
       <div class="card-title" style="font-size:13px;margin-top:16px;">📋 보안 이벤트 로그</div>
       <div id="draft-security-logs"><div class="empty"><div class="empty-text">로그 없음</div></div></div>
+    </div>
+
+    <!-- 카페 원고 작성기 보안 -->
+    <div class="card">
+      <div class="card-title">☕ 카페 원고 작성기 보안 현황
+        <span id="cafe-status-badge" class="badge bg">확인 중...</span>
+      </div>
+      <div class="stats-row" style="margin-bottom:14px;">
+        <div class="stat-card"><div class="stat-val" id="cafe-blocked-count" style="color:var(--red);">-</div><div class="stat-lbl">차단된 IP</div></div>
+        <div class="stat-card"><div class="stat-val" id="cafe-visitors" style="color:var(--green);">-</div><div class="stat-lbl">오늘 방문자</div></div>
+        <div class="stat-card"><div class="stat-val" id="cafe-coupang" style="color:var(--yellow);">-</div><div class="stat-lbl">쿠팡 클릭</div></div>
+      </div>
+
+      <div class="card-title" style="font-size:13px;">🚫 IP 차단 추가</div>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <input type="text" id="cafe-block-ip-input" placeholder="차단할 IP 입력" style="flex:1;font-family:monospace;" />
+        <input type="text" id="cafe-block-ip-reason" placeholder="사유" style="width:140px;" />
+        <button class="btn btn-danger btn-sm" onclick="blockCafeIP()">차단</button>
+      </div>
+
+      <div class="card-title" style="font-size:13px;">차단된 IP 목록</div>
+      <div id="cafe-blocked-list"><div class="empty"><div class="empty-icon">✅</div><div class="empty-text">차단된 IP가 없습니다</div></div></div>
+
+      <div class="card-title" style="font-size:13px;margin-top:16px;">📋 보안 이벤트 로그</div>
+      <div id="cafe-security-logs"><div class="empty"><div class="empty-text">로그 없음</div></div></div>
     </div>
   </div>
 </main>
@@ -2140,6 +2165,8 @@ async function loadIPManager() {
   } catch(e) {
     toast('데이터 로드 실패: ' + e.message, 'error');
   }
+  // 카페 원고 작성기도 로드
+  loadCafeIPManager();
 }
 
 async function blockDraftIP() {
@@ -2168,6 +2195,110 @@ async function unblockDraftIP(ip) {
   });
   toast('차단 해제됐어요!', 'success');
   loadIPManager();
+}
+
+
+// 카페 원고 작성기 IP 관리
+const CAFE_URL = 'https://cafe-draft-production.up.railway.app';
+let cafeAdminToken = '';
+
+async function loadCafeIPManager() {
+  if (!cafeAdminToken) {
+    const pw = prompt('카페 원고 작성기 관리자 비밀번호:');
+    if (!pw) return;
+    try {
+      const res = await fetch(CAFE_URL + '/api/security/auth', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({password: pw})
+      });
+      const data = await res.json();
+      if (!data.success) { toast('비밀번호가 틀렸어요', 'error'); return; }
+      cafeAdminToken = data.token;
+    } catch(e) { toast('카페 서버 연결 실패', 'error'); return; }
+  }
+
+  try {
+    const res = await fetch(CAFE_URL + '/api/security/admin', {
+      headers: {'X-Admin-Token': cafeAdminToken}
+    });
+    if (res.status === 403) { cafeAdminToken = ''; loadCafeIPManager(); return; }
+    const data = await res.json();
+
+    document.getElementById('cafe-blocked-count').textContent = data.blocked_count || 0;
+    const badge = document.getElementById('cafe-status-badge');
+    badge.textContent = data.blocked_count > 0 ? '경고' : '정상';
+    badge.className = 'badge ' + (data.blocked_count > 0 ? 'by' : 'bg');
+
+    // 통계
+    try {
+      const sres = await fetch(CAFE_URL + '/api/stats');
+      const stats = await sres.json();
+      document.getElementById('cafe-visitors').textContent = stats.today_visitors || 0;
+      document.getElementById('cafe-coupang').textContent = stats.today_coupang_clicks || 0;
+    } catch(e) {}
+
+    // 차단 IP 목록
+    const blocked = data.blocked_ips || [];
+    const el = document.getElementById('cafe-blocked-list');
+    if (!blocked.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">차단된 IP가 없습니다</div></div>';
+    } else {
+      el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>IP 주소</th><th>사유</th><th>차단 시각</th><th>액션</th></tr></thead><tbody>'
+        + blocked.map(b => `<tr>
+          <td style="font-family:monospace;color:var(--yellow);">${b.ip}</td>
+          <td style="color:var(--dim);">${b.reason || '자동 차단'}</td>
+          <td style="color:var(--dim);font-size:11px;">${(b.time||'').slice(0,16)}</td>
+          <td><button class="btn btn-ghost btn-sm" style="color:var(--green);border-color:var(--green);" onclick="unblockCafeIP('${b.ip}')">해제</button></td>
+        </tr>`).join('')
+        + '</tbody></table></div>';
+    }
+
+    // 보안 로그
+    const logs = data.security_logs || [];
+    const logEl = document.getElementById('cafe-security-logs');
+    if (!logs.length) {
+      logEl.innerHTML = '<div class="empty"><div class="empty-text">로그 없음</div></div>';
+    } else {
+      logEl.innerHTML = '<div class="table-wrap"><table><thead><tr><th>시각</th><th>IP</th><th>유형</th><th>내용</th></tr></thead><tbody>'
+        + logs.slice(0, 30).map(l => `<tr>
+          <td style="font-size:11px;color:var(--dim);">${(l.time||'').slice(0,16)}</td>
+          <td style="font-family:monospace;color:var(--yellow);font-size:12px;">${l.ip}</td>
+          <td><span class="badge by" style="font-size:10px;">${l.type}</span></td>
+          <td style="font-size:12px;color:var(--dim);">${l.detail}</td>
+        </tr>`).join('')
+        + '</tbody></table></div>';
+    }
+  } catch(e) {
+    toast('카페 데이터 로드 실패', 'error');
+  }
+}
+
+async function blockCafeIP() {
+  const ip = document.getElementById('cafe-block-ip-input').value.trim();
+  const reason = document.getElementById('cafe-block-ip-reason').value.trim() || '수동 차단';
+  if (!ip) { toast('IP를 입력해주세요', 'error'); return; }
+  if (!cafeAdminToken) { await loadCafeIPManager(); return; }
+  await fetch(CAFE_URL + '/api/security/block', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-Admin-Token': cafeAdminToken},
+    body: JSON.stringify({ip, reason})
+  });
+  document.getElementById('cafe-block-ip-input').value = '';
+  document.getElementById('cafe-block-ip-reason').value = '';
+  toast('차단됐어요!', 'success');
+  loadCafeIPManager();
+}
+
+async function unblockCafeIP(ip) {
+  if (!confirm(ip + ' 차단을 해제할까요?')) return;
+  await fetch(CAFE_URL + '/api/security/unblock', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-Admin-Token': cafeAdminToken},
+    body: JSON.stringify({ip})
+  });
+  toast('차단 해제됐어요!', 'success');
+  loadCafeIPManager();
 }
 
 loadAccountsData(); loadDashboard();
