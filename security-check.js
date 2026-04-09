@@ -45,7 +45,23 @@ function post(hostname, p, body, headers) {
 
 (async () => {
   try {
-    const prompt = `보안 전문가로서 아래 코드의 취약점을 분석하세요.\n코드:\n${code}\n\nJSON만 응답(마크다운없이):\n{"overall":"safe","summary":"요약","critical":[],"warning":[],"passed":["항목"]}`;
+    const prompt = `당신은 웹 보안 전문가입니다. 아래 코드를 분석해서 보안 취약점을 찾아주세요.
+
+코드:
+${code}
+
+반드시 아래 JSON 형식으로만 응답하세요. 마크다운 없이 JSON만:
+{
+  "overall": "safe 또는 warning 또는 danger 중 하나",
+  "summary": "전체 요약 한두문장",
+  "critical": [
+    {"title": "취약점 제목", "detail": "상세 설명", "fix": "수정 방법"}
+  ],
+  "warning": [
+    {"title": "경고 제목", "detail": "상세 설명", "fix": "수정 방법"}
+  ],
+  "passed": ["안전한 항목1", "안전한 항목2"]
+}`;
 
     const body = JSON.stringify({
       model: 'gpt-4o-mini',
@@ -61,6 +77,17 @@ function post(hostname, p, body, headers) {
 
     const text = r.choices[0].message.content.replace(/```json|```/g, '').trim();
     const j = JSON.parse(text);
+
+    if (j.critical) j.critical = j.critical.map(i => ({
+      title: i.title || '항목',
+      detail: i.detail || i.description || i.issue || '',
+      fix: i.fix || i.recommendation || i.solution || ''
+    }));
+    if (j.warning) j.warning = j.warning.map(i => ({
+      title: i.title || '항목',
+      detail: i.detail || i.description || i.issue || '',
+      fix: i.fix || i.recommendation || i.solution || ''
+    }));
 
     const e = j.overall === 'danger' ? '🚨' : j.overall === 'warning' ? '⚠️' : '✅';
     const color = j.overall === 'danger' ? 0xE24B4A : j.overall === 'warning' ? 0xEF9F27 : 0x639922;
