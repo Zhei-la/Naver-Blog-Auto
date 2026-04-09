@@ -190,6 +190,7 @@ tr:hover td { background:var(--s2); }
     <div class="nav-section">글 작성</div>
     <div class="nav-item" onclick="showPage('generate')" data-page="generate">✍️ 글 생성</div>
     <div class="nav-item" onclick="showPage('bulk')" data-page="bulk">📦 대량 발행</div>
+    <div class="nav-item" onclick="showPage('template')" data-page="template">🎨 템플릿 관리</div>
     <div class="nav-item" onclick="showPage('schedule')" data-page="schedule">⏰ 자동 발행 설정</div>
     <div class="nav-item" onclick="showPage('posts')" data-page="posts">📋 포스트 목록</div>
     <div class="nav-item" onclick="showPage('insight')" data-page="insight">📈 인사이트</div>
@@ -568,6 +569,33 @@ tr:hover td { background:var(--s2); }
       </div>
     </div>
   </div>
+
+  <!-- 템플릿 관리 -->
+  <div class="page" id="page-template">
+    <div class="page-header">
+      <div class="page-title">템플릿 <span>관리</span></div>
+      <button class="btn btn-primary" onclick="openModal('modal-template')">+ 템플릿 추가</button>
+    </div>
+    <div class="col2">
+      <!-- 템플릿 목록 -->
+      <div class="card">
+        <div class="card-title">등록된 템플릿</div>
+        <div id="templateList"><div class="empty"><div class="empty-icon">🎨</div><div class="empty-text">등록된 템플릿이 없어요</div></div></div>
+      </div>
+      <!-- 발행 설정 -->
+      <div class="card" id="template-publish-card" style="display:none;">
+        <div class="card-title">템플릿으로 발행</div>
+        <div class="fg"><label class="fl">선택된 템플릿</label><div id="selected-template-name" style="font-weight:700;color:var(--green);padding:4px 0;"></div></div>
+        <div class="fg">
+          <label class="fl">발행할 계정 선택</label>
+          <div id="template-accounts-list"></div>
+        </div>
+        <div id="template-variables-wrap"></div>
+        <button class="btn btn-primary btn-full" id="template-pub-btn" onclick="publishFromTemplate()">🚀 템플릿으로 발행</button>
+        <div id="template-pub-result" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
 </main>
 </div>
 
@@ -816,6 +844,36 @@ tr:hover td { background:var(--s2); }
     </div>
   </div>
 </div>
+
+<!-- 템플릿 추가/수정 모달 -->
+<div class="modal-bg" id="modal-template">
+  <div class="modal" style="width:700px;max-width:95vw;">
+    <div class="modal-title">템플릿 관리</div>
+    <input type="hidden" id="tpl-id" value="" />
+    <div class="fg"><label class="fl">템플릿 이름</label><input type="text" id="tpl-name" placeholder="예: 맛집 홍보 기본형" /></div>
+    <div class="fg">
+      <label class="fl">제목 템플릿</label>
+      <input type="text" id="tpl-title" placeholder="예: {{지역}} {{키워드}} 맛집 추천 | {{업체명}}" />
+      <div style="font-size:11px;color:var(--dim);margin-top:4px;">사용 가능한 변수: {{키워드}} {{지역}} {{업체명}} {{전화번호}} {{주소}}</div>
+    </div>
+    <div class="fg">
+      <label class="fl">본문 템플릿</label>
+      <textarea id="tpl-body" style="min-height:200px;" placeholder="{{지역}}에서 {{키워드}}로 유명한 {{업체명}}을 소개합니다...
+
+📍 위치: {{주소}}
+📞 전화: {{전화번호}}"></textarea>
+    </div>
+    <div class="fg">
+      <label class="fl">고정 이미지 업로드</label>
+      <input type="file" id="tpl-image-input" accept="image/*" multiple onchange="uploadTemplateImages()" style="padding:6px;" />
+      <div id="tpl-images-preview" class="img-preview" style="margin-top:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-template')">취소</button>
+      <button class="btn btn-primary" onclick="saveTemplate()">저장</button>
+    </div>
+  </div>
+</div>
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
@@ -835,6 +893,7 @@ function showPage(name) {
   if (name === 'accounts') loadAccounts();
   if (name === 'posts') loadPosts();
   if (name === 'schedule') loadSchedules();
+  if (name === 'template') { loadTemplates(); loadAccountsData(); }
   if (name === 'insight') { loadAccountsData(); const sel = document.getElementById('insight-account'); if (!sel.options.length || sel.options[0].value === '') { const first = sel.options[0]; sel.innerHTML = ''; sel.appendChild(first); accounts.forEach(a => { const o = document.createElement('option'); o.value=a.id; o.textContent=a.client_name+' ('+a.naver_id+')'; sel.appendChild(o); }); } }
   if (name === 'bulk') renderBulkAccounts();
 }
@@ -1785,6 +1844,177 @@ async function loadInsight() {
   
   btn.disabled = false;
   btn.innerHTML = '📊 인사이트 불러오기';
+}
+
+
+// 템플릿 관리
+let currentTemplateId = null;
+let templateImages = [];
+
+async function loadTemplates() {
+  const res = await fetch('/api/templates');
+  const templates = await res.json();
+  const el = document.getElementById('templateList');
+  if (!templates.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🎨</div><div class="empty-text">등록된 템플릿이 없어요</div></div>';
+    return;
+  }
+  el.innerHTML = templates.map(t => {
+    const imgs = JSON.parse(t.images||'[]');
+    return `<div class="card" style="margin-bottom:10px;cursor:pointer;" onclick="selectTemplate(${t.id},'${t.name.replace(/'/g,"\\'")}')">
+      <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:700;margin-bottom:4px;">${t.name}</div>
+          <div style="font-size:11px;color:var(--dim);">${t.title_template}</div>
+          ${imgs.length ? `<div style="font-size:11px;color:var(--blue);margin-top:3px;">📷 이미지 ${imgs.length}장</div>` : ''}
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();editTemplate(${t.id})">수정</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTemplateById(${t.id})">삭제</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectTemplate(id, name) {
+  currentTemplateId = id;
+  document.getElementById('selected-template-name').textContent = name;
+  document.getElementById('template-publish-card').style.display = 'block';
+  
+  // 계정 목록
+  const accWrap = document.getElementById('template-accounts-list');
+  accWrap.innerHTML = accounts.map(a => `
+    <label style="display:flex;flex-direction:row;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer;">
+      <input type="checkbox" class="tpl-acc-check" value="${a.id}" style="width:auto;">
+      ${a.client_name} (${a.naver_id})
+    </label>`).join('');
+  
+  // 변수 입력란
+  const varWrap = document.getElementById('template-variables-wrap');
+  varWrap.innerHTML = `
+    <hr class="divider">
+    <div class="section-label">변수 설정 (계정 공통)</div>
+    <div class="col2">
+      <div class="fg"><label class="fl">키워드</label><input type="text" id="var-keyword" placeholder="예: 맛집" /></div>
+      <div class="fg"><label class="fl">지역</label><input type="text" id="var-region" placeholder="예: 강남" /></div>
+    </div>
+    <div class="col2">
+      <div class="fg"><label class="fl">업체명</label><input type="text" id="var-bizname" placeholder="예: 스타벅스 강남점" /></div>
+      <div class="fg"><label class="fl">전화번호</label><input type="text" id="var-phone" placeholder="예: 02-1234-5678" /></div>
+    </div>
+    <div class="fg"><label class="fl">주소</label><input type="text" id="var-address" placeholder="예: 서울시 강남구..." /></div>
+  `;
+}
+
+async function publishFromTemplate() {
+  if (!currentTemplateId) return;
+  const checks = document.querySelectorAll('.tpl-acc-check:checked');
+  const accountIds = Array.from(checks).map(c => parseInt(c.value));
+  if (!accountIds.length) { toast('계정을 선택해주세요', 'error'); return; }
+  
+  const variables = {
+    '키워드': document.getElementById('var-keyword')?.value || '',
+    '지역': document.getElementById('var-region')?.value || '',
+    '업체명': document.getElementById('var-bizname')?.value || '',
+    '전화번호': document.getElementById('var-phone')?.value || '',
+    '주소': document.getElementById('var-address')?.value || '',
+  };
+  
+  const btn = document.getElementById('template-pub-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 발행 중...';
+  
+  const res = await fetch('/api/templates/' + currentTemplateId + '/publish', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({account_ids: accountIds, variables_list: accountIds.map(() => variables)})
+  });
+  const data = await res.json();
+  
+  document.getElementById('template-pub-result').innerHTML = (data.results||[]).map(r =>
+    `<div class="result-box ${r.success?'result-ok':'result-err'}" style="margin-bottom:5px;">
+      ${r.success?'✅':'❌'} ${r.account} - ${r.success?'발행 완료':r.message}
+    </div>`
+  ).join('');
+  
+  btn.disabled = false;
+  btn.innerHTML = '🚀 템플릿으로 발행';
+}
+
+async function uploadTemplateImages() {
+  const files = document.getElementById('tpl-image-input').files;
+  const preview = document.getElementById('tpl-images-preview');
+  
+  for (const file of files) {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const res = await fetch('/api/templates/upload-image', {method:'POST', body: formData});
+      const data = await res.json();
+      if (data.success) {
+        templateImages.push(data.url);
+        preview.innerHTML += `<div style="position:relative;display:inline-block;margin:4px;">
+          <img src="${data.url}" class="img-thumb" />
+          <div style="position:absolute;top:2px;right:2px;background:var(--red);color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="removeTemplateImage('${data.url}',this.parentElement)">✕</div>
+        </div>`;
+        toast('이미지 업로드됨', 'success');
+      }
+    } catch(e) { toast('업로드 실패', 'error'); }
+  }
+}
+
+function removeTemplateImage(url, el) {
+  templateImages = templateImages.filter(u => u !== url);
+  el.remove();
+}
+
+async function saveTemplate() {
+  const id = document.getElementById('tpl-id').value;
+  const name = document.getElementById('tpl-name').value.trim();
+  const title = document.getElementById('tpl-title').value.trim();
+  const body = document.getElementById('tpl-body').value.trim();
+  if (!name || !title || !body) { toast('이름, 제목, 본문은 필수예요', 'error'); return; }
+  
+  const payload = {name, title_template: title, body_template: body, images: templateImages};
+  
+  if (id) {
+    await fetch('/api/templates/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  } else {
+    await fetch('/api/templates', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  }
+  
+  toast('저장됐어요!', 'success');
+  closeModal('modal-template');
+  templateImages = [];
+  loadTemplates();
+}
+
+async function editTemplate(id) {
+  const res = await fetch('/api/templates');
+  const templates = await res.json();
+  const t = templates.find(x => x.id === id);
+  if (!t) return;
+  
+  document.getElementById('tpl-id').value = t.id;
+  document.getElementById('tpl-name').value = t.name;
+  document.getElementById('tpl-title').value = t.title_template;
+  document.getElementById('tpl-body').value = t.body_template;
+  templateImages = JSON.parse(t.images||'[]');
+  
+  const preview = document.getElementById('tpl-images-preview');
+  preview.innerHTML = templateImages.map(url => `<div style="position:relative;display:inline-block;margin:4px;">
+    <img src="${url}" class="img-thumb" />
+    <div style="position:absolute;top:2px;right:2px;background:var(--red);color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="removeTemplateImage('${url}',this.parentElement)">✕</div>
+  </div>`).join('');
+  
+  openModal('modal-template');
+}
+
+async function deleteTemplateById(id) {
+  if (!confirm('삭제할까요?')) return;
+  await fetch('/api/templates/' + id, {method:'DELETE'});
+  toast('삭제됨', 'success');
+  loadTemplates();
 }
 
 loadAccountsData(); loadDashboard();

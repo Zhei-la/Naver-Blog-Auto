@@ -55,6 +55,15 @@ def init_db():
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         published_at TEXT
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS blog_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        title_template TEXT NOT NULL,
+        body_template TEXT NOT NULL,
+        images TEXT DEFAULT '[]',
+        variables TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS auto_schedule (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         account_id INTEGER NOT NULL,
@@ -461,3 +470,93 @@ def delete_schedule(sid):
     conn.commit()
     conn.close()
     return jsonify({"success": True})
+
+# ── 템플릿 API ──
+from template_manager import upload_image, delete_image, render_template
+
+@app.route('/api/templates', methods=['GET'])
+def get_templates():
+    conn = get_db()
+    templates = conn.execute('SELECT * FROM blog_templates ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return jsonify([dict(t) for t in templates])
+
+@app.route('/api/templates', methods=['POST'])
+def add_template():
+    d = request.json
+    conn = get_db()
+    conn.execute('''INSERT INTO blog_templates (name, title_template, body_template, images, variables)
+                    VALUES (?,?,?,?,?)''',
+        (d['name'], d['title_template'], d['body_template'],
+         json.dumps(d.get('images',[])), json.dumps(d.get('variables',[]))))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/<int:tid>', methods=['PUT'])
+def update_template(tid):
+    d = request.json
+    conn = get_db()
+    conn.execute('''UPDATE blog_templates SET name=?, title_template=?, body_template=?, images=?, variables=? WHERE id=?''',
+        (d['name'], d['title_template'], d['body_template'],
+         json.dumps(d.get('images',[])), json.dumps(d.get('variables',[])), tid))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/<int:tid>', methods=['DELETE'])
+def delete_template(tid):
+    conn = get_db()
+    conn.execute('DELETE FROM blog_templates WHERE id=?', (tid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/upload-image', methods=['POST'])
+def upload_template_image():
+    if 'image' not in request.files:
+        return jsonify({"success": False, "message": "이미지 없음"})
+    file = request.files['image']
+    import base64
+    file_data = "data:" + file.content_type + ";base64," + base64.b64encode(file.read()).decode()
+    result = upload_image(file_data, file.filename)
+    return jsonify(result)
+
+@app.route('/api/templates/<int:tid>/publish', methods=['POST'])
+def publish_from_template(tid):
+    d = request.json
+    account_ids = d.get('account_ids', [])
+    variables_list = d.get('variables_list', [{}])  # 계정별 변수값
+
+    conn = get_db()
+    template = conn.execute('SELECT * FROM blog_templates WHERE id=?', (tid,)).fetchone()
+    if not template:
+        return jsonify({"success": False, "message": "템플릿 없음"})
+
+    results = []
+    for i, aid in enumerate(account_ids):
+        account = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not account:
+            continue
+        
+        variables = variables_list[i] if i < len(variables_list) else {}
+        title = render_template(template['title_template'], variables)
+        body = render_template(template['body_template'], variables)
+        images = json.loads(template['images'] or '[]')
+
+        cursor = conn.execute('''INSERT INTO posts
+            (account_id, keyword, title, body, images, blog_type, status)
+            VALUES (?,?,?,?,?,?,?)''',
+            (aid, variables.get('키워드', ''), title, body,
+             template['images'], account['blog_type'], 'draft'))
+        post_id = cursor.lastrowid
+
+        result = publish_post(account['naver_id'], account['naver_pw'], title, body)
+        if result['success']:
+            conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                        ('published', result['url'], datetime.now().isoformat(), post_id))
+        results.append({"account": account['client_name'], "success": result['success'], "message": result.get('message','')})
+
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "results": results})
