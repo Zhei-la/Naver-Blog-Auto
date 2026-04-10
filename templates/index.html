@@ -2451,8 +2451,8 @@ function renderAccountTable(list) {
 
 // ── 코드 관리 ──
 const BLOG_DRAFT = 'https://blog-draft-production.up.railway.app';
-const CAFE_DRAFT = 'https://cafe-draft-production.up.railway.app';
-let blogToken = '';
+const CAFE_DRAFT = 'https://blog-draft-production.up.railway.app'; // 통합 서버
+let blogToken = sessionStorage.getItem('blog_admin_token') || '';
 let cafeToken = '';
 
 async function loadCodeManager() {
@@ -2468,7 +2468,7 @@ async function getBlogToken() {
     body: JSON.stringify({password: pw})
   });
   const data = await res.json();
-  if(data.success) { blogToken = data.token; return blogToken; }
+  if(data.success) { blogToken = data.token; sessionStorage.setItem('blog_admin_token', data.token); return blogToken; }
   toast('비밀번호 오류', 'error'); return null;
 }
 
@@ -2503,17 +2503,10 @@ async function loadBlogCode() {
 }
 
 async function loadCafeStats() {
-  if(!cafeToken) {
-    const pw = prompt('카페 IP 차단 관리 비밀번호를 입력하세요:');
-    if(!pw) return;
-    const res = await fetch(CAFE_DRAFT + '/api/security/auth', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({password: pw})
-    });
-    const data = await res.json();
-    if(!data.success) { toast('비밀번호 오류', 'error'); return; }
-    cafeToken = data.token;
-  }
+  // 블로그랑 같은 서버 - blogToken 재사용
+  const token = await getBlogToken();
+  if(!token) return;
+  cafeToken = token;
   try {
     const res = await fetch(CAFE_DRAFT + '/api/code/current', {
       headers: {'X-Admin-Token': cafeToken}
