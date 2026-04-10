@@ -109,11 +109,13 @@ async def ai_response(bot_type, user_message, context="", is_reply_to_bot=False)
 
 절대 규칙:
 - 반말로만
-- 이모지 금지 (진짜 감정 표현할 때만 딱 1개)
+- 그림 이모지는 진짜 감정 터질 때만 딱 1개 (자주 쓰면 안 됨, 대화 5~6번에 1번 정도)
+- !, ?, ... 같은 특수문자는 자연스럽게 써도 됨
+- 마침표(.) 최대한 쓰지 마 — 말 끊기는 느낌 줄이기
 - 문장 끝나면 반드시 줄바꿈
 - 2~3문장 이내
 - 존댓말/공손함 금지
-- 말 이어쓰기 금지, 문장마다 개행
+- 자연스럽고 캐주얼하게
 {f'상황: {context}' if context else ''}
 {f'최근 대화:{chr(10)}{history_text}' if history_text else ''}"""
 
@@ -223,7 +225,7 @@ async def on_message(message):
         await message.channel.send("응.")
         return
     if intent["intent"] == "confirm":
-        # 루피가 확인했으면 알람 모드 해제
+        # 대장이 확인했으면 알람 모드 해제
         alert_mode = False
         return
     if intent["intent"] == "status":
@@ -285,9 +287,9 @@ async def on_message(message):
 
     # 일반 대화
     if not is_quiet:
-        msg = await ai_response("writer", f"루피: {message.content}")
+        msg = await ai_response("writer", f"대장: {message.content}")
         await send_single(message.channel, "writer", msg)
-        # 알람 모드였으면 루피가 말하는 순간 해제
+        # 알람 모드였으면 대장이 말하는 순간 해제
         if alert_mode:
             alert_mode = False
 
@@ -341,7 +343,7 @@ async def on_message(message):
         embed.add_field(name="초안", value=f"{draft}개", inline=True)
         await message.channel.send(embed=embed)
     elif not is_quiet:
-        msg = await ai_response("report", f"루피: {message.content}")
+        msg = await ai_response("report", f"대장: {message.content}")
         await send_single(message.channel, "report", msg)
 
 @tasks.loop(hours=24)
@@ -406,7 +408,7 @@ async def on_message(message):
         except:
             pass
     elif not is_quiet:
-        msg = await ai_response("alert", f"루피: {message.content}")
+        msg = await ai_response("alert", f"대장: {message.content}")
         await send_single(message.channel, "alert", msg)
 
 @tasks.loop(hours=6)
@@ -418,7 +420,7 @@ async def check_health():
     if accounts is None:
         set_alert_mode()
         embed = discord.Embed(
-            description="**감찰관**\n서버 연결 끊겼어. 루피 확인해줘.",
+            description="**감찰관**\n서버 연결 끊겼어. 대장 확인해줘.",
             color=BOT_COLORS["alert"]
         )
         await channel.send(embed=embed)
@@ -458,7 +460,7 @@ async def random_group_chat():
         "네이버 블로그 요즘 알고리즘 어떤 것 같아",
         "AI 요즘 뭐가 핫한 것 같아",
         "우리 팀에서 제일 쓸모없는 봇 누구야",
-        "루피한테 하고 싶은 말",
+        "대장한테 하고 싶은 말",
         "봇으로 태어난 거 어때",
         "요즘 세상에서 제일 이해 안 되는 게 뭔 것 같아",
     ]
@@ -493,7 +495,7 @@ async def security_check():
                 embed.add_field(name="이슈", value=issue, inline=False)
             if blocked:
                 embed.add_field(name="차단 IP", value=", ".join(blocked[:5]), inline=False)
-            embed.set_footer(text="루피 확인 후 '확인' 입력하거나 1시간 후 자동 해제")
+            embed.set_footer(text="대장 확인 후 '확인' 입력하거나 1시간 후 자동 해제")
             await channel.send(embed=embed)
         else:
             embed = discord.Embed(color=0x2ecc71, timestamp=datetime.now())
@@ -541,7 +543,7 @@ async def on_message(message):
                 await send_single(message.channel, "daily", reply)
         return
     if not is_quiet:
-        msg = await ai_response("daily", f"루피: {message.content}")
+        msg = await ai_response("daily", f"대장: {message.content}")
         await send_single(message.channel, "daily", msg)
 
 @tasks.loop(hours=24)
