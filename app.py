@@ -1,580 +1,687 @@
-import discord
-from discord.ext import commands, tasks
-import aiohttp
-import asyncio
-import os
-import json
-import random
-from datetime import datetime, timedelta
-from openai import OpenAI
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from security import rate_limit, sanitize_input, add_security_headers, check_password, security_report, SECRET_KEY
+import sqlite3, os, json
+from datetime import datetime
+from writer import generate_post, suggest_keywords, BLOG_TYPES
+from blogger import publish_post
+from apscheduler.schedulers.background import BackgroundScheduler
 
-WRITER_TOKEN = os.getenv("WRITER_BOT_TOKEN")
-REPORT_TOKEN = os.getenv("REPORT_BOT_TOKEN")
-ALERT_TOKEN = os.getenv("ALERT_BOT_TOKEN")
-DAILY_TOKEN = os.getenv("DAILY_BOT_TOKEN")
-FLASK_URL = os.getenv("FLASK_URL", "http://localhost:5000")
-CH_ID = int(os.getenv("CH_COMMAND", 0))
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+app = Flask(__name__)
+app.secret_key = SECRET_KEY
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+@app.before_request
+def check_login():
+    public = ['/login', '/api/login', '/static']
+    if any(request.path.startswith(p) for p in public):
+        return
+    if not session.get('logged_in'):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'unauthorized'}), 401
+        return redirect('/login')
+DB = "/app/data/blog.db"
 
-intents = discord.Intents.default()
-intents.message_content = True
+def init_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_name TEXT NOT NULL,
+        naver_id TEXT NOT NULL,
+        naver_pw TEXT NOT NULL,
+        blog_type TEXT DEFAULT 'info',
+        auto_like INTEGER DEFAULT 0,
+        auto_comment INTEGER DEFAULT 0,
+        auto_neighbor INTEGER DEFAULT 0,
+        auto_like_count INTEGER DEFAULT 10,
+        auto_comment_count INTEGER DEFAULT 5,
+        auto_neighbor_count INTEGER DEFAULT 5,
+        auto_target TEXT DEFAULT 'neighbor',
+        auto_keyword TEXT DEFAULT '',
+        keywords TEXT DEFAULT '[]',
+        grade TEXT DEFAULT 'basic',
+        memo TEXT DEFAULT '',
+        target_audience TEXT DEFAULT '',
+        monthly_goal INTEGER DEFAULT 0,
+        contract_start TEXT DEFAULT '',
+        special_notes TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER,
+        keyword TEXT,
+        title TEXT,
+        body TEXT,
+        images TEXT DEFAULT '[]',
+        blog_type TEXT DEFAULT 'info',
+        post_style TEXT DEFAULT 'info',
+        cta_link TEXT DEFAULT '',
+        cta_text TEXT DEFAULT '',
+        cpa_link TEXT DEFAULT '',
+        cps_link TEXT DEFAULT '',
+        status TEXT DEFAULT 'draft',
+        published_url TEXT,
+        scheduled_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        published_at TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS blog_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        title_template TEXT NOT NULL,
+        body_template TEXT NOT NULL,
+        images TEXT DEFAULT '[]',
+        variables TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS auto_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL,
+        keywords TEXT DEFAULT '[]',
+        grade TEXT DEFAULT 'basic',
+        post_times TEXT DEFAULT '[]',
+        post_style TEXT DEFAULT 'info',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.commit()
+    conn.close()
 
-BOT_PERSONAS = {
-    "writer": {
-        "name": "세종대왕",
-        "personality": """반말. 한 문장. 감성적이고 도도함. 가끔 옛말 한 단어.
-예시: '그게 무슨 글이냐.' / '...오늘따라 시 한 편 쓰고 싶구나.'""",
-    },
-    "report": {
-        "name": "통계청장",
-        "personality": """반말. 한 문장. 숫자로 말함. '통계적으로' 자주 씀.
-예시: '통계적으로 그건 틀렸어.' / '...사실 나도 몰라.'""",
-    },
-    "alert": {
-        "name": "감찰관",
-        "personality": """반말. 한 문장. 예민하고 피해의식 있음.
-예시: '야 그거 이상하지 않아?' / '...이게 다 계획된 거야.'""",
-    },
-    "daily": {
-        "name": "일일 리포터",
-        "personality": """반말. 한 문장. 밝고 TMI 잘 던짐.
-예시: '오 그거 요즘 완전 핫하던데?' / '나 그것보다 더 신기한 거 알아'""",
-    }
-}
+def get_db():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-BOT_NAMES = {"alert": "감찰관", "report": "통계청장", "daily": "일일 리포터", "writer": "세종대왕"}
-BOT_COLORS = {"alert": 0xe74c3c, "report": 0x3498db, "daily": 0xf39c12, "writer": 0x2ecc71}
+# ── 계정 API ──
+@app.route('/api/accounts', methods=['GET'])
+def get_accounts():
+    conn = get_db()
+    rows = conn.execute('SELECT * FROM accounts').fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
 
-# 전역 상태
-is_quiet = False
-alert_mode = False          # 알람/오류 발생 시 True
-alert_mode_until = None     # 알람 모드 해제 시각
-daily_chat_count = 0
-last_reset_date = datetime.now().date()
-recent_messages = []
+@app.route('/api/accounts', methods=['POST'])
+def add_account():
+    d = request.json
+    conn = get_db()
+    import json as _json
+    conn.execute('''INSERT INTO accounts 
+        (client_name, naver_id, naver_pw, blog_type,
+         auto_like, auto_comment, auto_neighbor,
+         auto_like_count, auto_comment_count, auto_neighbor_count,
+         auto_target, auto_keyword, keywords)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (d['client_name'], d['naver_id'], d['naver_pw'], d.get('blog_type','info'),
+         d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
+         d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
+         d.get('auto_target','neighbor'), d.get('auto_keyword',''),
+         _json.dumps(d.get('keywords',[])),
+         d.get('memo',''), d.get('target_audience',''),
+         d.get('monthly_goal',0), d.get('contract_start',''), d.get('special_notes','')))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-def reset_daily_count():
-    global daily_chat_count, last_reset_date
-    today = datetime.now().date()
-    if today != last_reset_date:
-        daily_chat_count = 0
-        last_reset_date = today
+@app.route('/api/accounts/<int:aid>', methods=['PUT'])
+def update_account(aid):
+    d = request.json
+    conn = get_db()
+    import json as _json
+    conn.execute('''UPDATE accounts SET
+        client_name=?, naver_id=?, blog_type=?,
+        auto_like=?, auto_comment=?, auto_neighbor=?,
+        auto_like_count=?, auto_comment_count=?, auto_neighbor_count=?,
+        auto_target=?, auto_keyword=?, keywords=?, grade=? WHERE id=?''',
+        (d.get('client_name',''), d.get('naver_id',''), d.get('blog_type','info'),
+         d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
+         d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
+         d.get('auto_target','neighbor'), d.get('auto_keyword',''),
+         _json.dumps(d.get('keywords',[])), d.get('grade','basic'), aid))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-def can_chat():
-    global alert_mode, alert_mode_until
-    reset_daily_count()
-    # 알람 모드면 1시간 후 자동 해제
-    if alert_mode and alert_mode_until and datetime.now() > alert_mode_until:
-        alert_mode = False
-        alert_mode_until = None
-    return not is_quiet and not alert_mode and daily_chat_count < 10
+@app.route('/api/accounts/<int:aid>', methods=['DELETE'])
+def delete_account(aid):
+    conn = get_db()
+    conn.execute('DELETE FROM accounts WHERE id=?', (aid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-def set_alert_mode():
-    global alert_mode, alert_mode_until
-    alert_mode = True
-    alert_mode_until = datetime.now() + timedelta(hours=1)
+@app.route('/api/blog_types', methods=['GET'])
+def get_blog_types():
+    return jsonify([{"key": k, "name": v["name"]} for k, v in BLOG_TYPES.items()])
 
-def add_chat_count():
-    global daily_chat_count
-    daily_chat_count += 1
-
-def add_to_history(name, message):
-    global recent_messages
-    recent_messages.append({"name": name, "message": message})
-    if len(recent_messages) > 15:
-        recent_messages = recent_messages[-15:]
-
-async def get_stats():
+# ── 키워드 추천 ──
+@app.route('/api/keywords', methods=['POST'])
+def keywords():
+    d = request.json
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{FLASK_URL}/api/accounts", timeout=aiohttp.ClientTimeout(total=10)) as res:
-                accounts = await res.json()
-            async with session.get(f"{FLASK_URL}/api/posts", timeout=aiohttp.ClientTimeout(total=10)) as res:
-                posts = await res.json()
-        return accounts, posts
-    except:
-        return None, None
-
-async def ai_response(bot_type, user_message, context="", is_reply_to_bot=False):
-    persona = BOT_PERSONAS[bot_type]
-    history_text = ""
-    if recent_messages:
-        history_text = "\n".join([f"{m['name']}: {m['message']}" for m in recent_messages[-5:]])
-
-    system_prompt = f"""너는 블로그 자동화 시스템 AI 직원이야.
-이름: {persona['name']}
-성격: {persona['personality']}
-
-절대 규칙:
-- 반말, 한 문장만
-- 이모지 없거나 최대 1개
-- 짧고 자연스럽게
-- 존댓말/공손함 금지
-{f'상황: {context}' if context else ''}
-{f'최근 대화:{chr(10)}{history_text}' if history_text else ''}"""
-
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0.95,
-            max_tokens=80
-        )
-        return response.choices[0].message.content.strip()
-    except:
-        return "..."
-
-async def detect_intent(message):
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{
-                "role": "system",
-                "content": '메시지 의도를 JSON으로만. {"intent": "quiet/resume/stats/generate/publish/status/confirm/chat", "keyword": "", "post_id": 0}'
-            }, {"role": "user", "content": message}],
-            temperature=0,
-            max_tokens=60
-        )
-        content = response.choices[0].message.content.replace("```json","").replace("```","").strip()
-        return json.loads(content)
-    except:
-        return {"intent": "chat"}
-
-async def send_single(channel, bot_type, message):
-    add_to_history(BOT_NAMES[bot_type], message)
-    embed = discord.Embed(description=f"**{BOT_NAMES[bot_type]}**\n{message}", color=BOT_COLORS[bot_type])
-    await channel.send(embed=embed)
-
-async def group_conversation(channel, topic, situation="잡담", initiator="daily"):
-    if not can_chat():
-        return
-    add_chat_count()
-
-    others = [b for b in ["writer", "report", "alert", "daily"] if b != initiator]
-    random.shuffle(others)
-
-    first_msg = await ai_response(initiator, f"주제: {topic} (상황: {situation})")
-    await send_single(channel, initiator, first_msg)
-    await asyncio.sleep(random.uniform(2, 4))
-
-    second_msg = await ai_response(others[0], f"반응: {first_msg}", is_reply_to_bot=True)
-    await send_single(channel, others[0], second_msg)
-    await asyncio.sleep(random.uniform(2, 4))
-
-    third_msg = await ai_response(others[1], f"반응: {second_msg}", is_reply_to_bot=True)
-    await send_single(channel, others[1], third_msg)
-
-    if random.random() < 0.25:
-        await asyncio.sleep(random.uniform(2, 5))
-        final_bot = random.choice([initiator] + others[:2])
-        final_msg = await ai_response(final_bot, "한마디 더", is_reply_to_bot=True)
-        await send_single(channel, final_bot, final_msg)
-
-async def before_loop_helper(bot, hour):
-    await bot.wait_until_ready()
-    now = datetime.now()
-    target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-    if now >= target:
-        target += timedelta(days=1)
-    await asyncio.sleep((target - now).total_seconds())
-
-# ──────────────────────────────────────────
-# 세종대왕 (Writer Bot)
-# ──────────────────────────────────────────
-writer_bot = commands.Bot(command_prefix="!!", intents=intents)
-
-@writer_bot.event
-async def on_ready():
-    print(f"✅ 세종대왕 온라인: {writer_bot.user}")
-    writer_morning.start()
-
-@writer_bot.event
-async def on_message(message):
-    if message.channel.id != CH_ID:
-        return
-    global is_quiet, alert_mode
-
-    if message.author.bot:
-        if not is_quiet and not alert_mode and can_chat() and random.random() < 0.25:
-            bot_name = message.author.display_name
-            if "세종" not in bot_name:
-                await asyncio.sleep(random.uniform(3, 8))
-                embed_desc = message.embeds[0].description if message.embeds else message.content
-                content = embed_desc.split('\n', 1)[-1] if '\n' in embed_desc else embed_desc
-                reply = await ai_response("writer", f"반응: {content[:150]}", is_reply_to_bot=True)
-                await send_single(message.channel, "writer", reply)
-        return
-
-    intent = await detect_intent(message.content)
-
-    if intent["intent"] == "quiet":
-        is_quiet = True
-        await message.channel.send("알겠어.")
-        return
-    if intent["intent"] == "resume":
-        is_quiet = False
-        await message.channel.send("응.")
-        return
-    if intent["intent"] == "confirm":
-        # 루피가 확인했으면 알람 모드 해제
-        alert_mode = False
-        return
-    if intent["intent"] == "status":
-        accounts, posts = await get_stats()
-        context = f"계정 {len(accounts) if accounts else 0}개, 포스트 {len(posts) if posts else 0}개"
-        msg = await ai_response("writer", f"현재 상황: {context}")
-        await send_single(message.channel, "writer", msg)
-        return
-    if intent["intent"] == "generate":
-        keyword = intent.get("keyword", message.content)
-        accounts, _ = await get_stats()
-        if not accounts:
-            await message.channel.send("서버 연결 안 됨.")
-            return
-        embed = discord.Embed(description=f"키워드: **{keyword}**\n어느 계정?", color=BOT_COLORS["writer"])
-        embed.set_author(name="세종대왕")
-        for i, acc in enumerate(accounts):
-            embed.add_field(name=f"{i+1}. {acc['client_name']}", value=acc['naver_id'], inline=True)
-        embed.set_footer(text="숫자로 답해줘")
-        await message.channel.send(embed=embed)
-        def check(m):
-            return m.author == message.author and m.channel == message.channel and m.content.isdigit()
-        try:
-            reply = await writer_bot.wait_for("message", check=check, timeout=30)
-            account = accounts[int(reply.content) - 1]
-        except:
-            await message.channel.send("시간 초과.")
-            return
-        loading = await message.channel.send("생성 중...")
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{FLASK_URL}/api/generate",
-                json={"account_id": account['id'], "keyword": keyword},
-                timeout=aiohttp.ClientTimeout(total=60)) as res:
-                data = await res.json()
-        await loading.delete()
-        if data.get("success"):
-            embed = discord.Embed(description=f"**{data['title']}**\n\n{data['body'][:300]}...", color=BOT_COLORS["writer"])
-            embed.set_author(name="세종대왕")
-            embed.set_footer(text=f"Post ID: {data['post_id']} | '발행해줘 {data['post_id']}'")
-            await message.channel.send(embed=embed)
-        else:
-            await message.channel.send(f"생성 실패: {data.get('message')}")
-        return
-    if intent["intent"] == "publish":
-        post_id = intent.get("post_id")
-        if not post_id:
-            await message.channel.send("Post ID 알려줘.")
-            return
-        loading = await message.channel.send("발행 중...")
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{FLASK_URL}/api/publish/{post_id}", timeout=aiohttp.ClientTimeout(total=120)) as res:
-                data = await res.json()
-        await loading.delete()
-        if data.get("success"):
-            await send_single(message.channel, "writer", "발행 완료.")
-        else:
-            await message.channel.send(f"발행 실패: {data.get('message')}")
-        return
-
-    # 일반 대화
-    if not is_quiet:
-        msg = await ai_response("writer", f"루피: {message.content}")
-        await send_single(message.channel, "writer", msg)
-        # 알람 모드였으면 루피가 말하는 순간 해제
-        if alert_mode:
-            alert_mode = False
-
-@tasks.loop(hours=24)
-async def writer_morning():
-    channel = writer_bot.get_channel(CH_ID)
-    if not channel or not can_chat():
-        return
-    await group_conversation(channel, "오늘 아침 각자 계획", situation="아침", initiator="writer")
-
-@writer_morning.before_loop
-async def before_writer_morning():
-    await before_loop_helper(writer_bot, 9)
-
-# ──────────────────────────────────────────
-# 통계청장 (Report Bot)
-# ──────────────────────────────────────────
-report_bot = commands.Bot(command_prefix="!!", intents=intents)
-
-@report_bot.event
-async def on_ready():
-    print(f"✅ 통계청장 온라인: {report_bot.user}")
-    report_stats.start()
-
-@report_bot.event
-async def on_message(message):
-    if message.channel.id != CH_ID:
-        return
-    if message.author.bot:
-        if not is_quiet and not alert_mode and can_chat() and random.random() < 0.2:
-            bot_name = message.author.display_name
-            if "통계" not in bot_name:
-                await asyncio.sleep(random.uniform(4, 10))
-                embed_desc = message.embeds[0].description if message.embeds else message.content
-                content = embed_desc.split('\n', 1)[-1] if '\n' in embed_desc else embed_desc
-                reply = await ai_response("report", f"반응: {content[:150]}", is_reply_to_bot=True)
-                await send_single(message.channel, "report", reply)
-        return
-    intent = await detect_intent(message.content)
-    if intent["intent"] == "stats":
-        accounts, posts = await get_stats()
-        if not accounts:
-            await message.channel.send("서버 연결 안 됨.")
-            return
-        published = len([p for p in posts if p['status'] == 'published'])
-        draft = len([p for p in posts if p['status'] == 'draft'])
-        embed = discord.Embed(title="현황 보고서", color=BOT_COLORS["report"], timestamp=datetime.now())
-        embed.set_author(name="통계청장")
-        embed.add_field(name="계정", value=f"{len(accounts)}개", inline=True)
-        embed.add_field(name="발행", value=f"{published}개", inline=True)
-        embed.add_field(name="초안", value=f"{draft}개", inline=True)
-        await message.channel.send(embed=embed)
-    elif not is_quiet:
-        msg = await ai_response("report", f"루피: {message.content}")
-        await send_single(message.channel, "report", msg)
-
-@tasks.loop(hours=24)
-async def report_stats():
-    channel = report_bot.get_channel(CH_ID)
-    if not channel or not can_chat():
-        return
-    await asyncio.sleep(15)
-    accounts, posts = await get_stats()
-    if not accounts:
-        return
-    published = len([p for p in posts if p['status'] == 'published'])
-    msg = await ai_response("report", f"오늘 현황: 계정 {len(accounts)}개, 발행 {published}개")
-    await send_single(channel, "report", msg)
-
-@report_stats.before_loop
-async def before_report_stats():
-    await before_loop_helper(report_bot, 9)
-
-# ──────────────────────────────────────────
-# 감찰관 (Alert Bot)
-# ──────────────────────────────────────────
-alert_bot = commands.Bot(command_prefix="!!", intents=intents)
-
-@alert_bot.event
-async def on_ready():
-    print(f"✅ 감찰관 온라인: {alert_bot.user}")
-    check_health.start()
-    alert_morning.start()
-    random_group_chat.start()
-    security_check.start()
-
-@alert_bot.event
-async def on_message(message):
-    if message.channel.id != CH_ID:
-        return
-    if message.author.bot:
-        if not is_quiet and not alert_mode and can_chat() and random.random() < 0.3:
-            bot_name = message.author.display_name
-            if "감찰" not in bot_name:
-                await asyncio.sleep(random.uniform(2, 7))
-                embed_desc = message.embeds[0].description if message.embeds else message.content
-                content = embed_desc.split('\n', 1)[-1] if '\n' in embed_desc else embed_desc
-                reply = await ai_response("alert", f"반응: {content[:150]}", is_reply_to_bot=True)
-                await send_single(message.channel, "alert", reply)
-        return
-    if any(kw in message.content for kw in ["보안", "해킹", "안전", "점검", "차단"]):
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{FLASK_URL}/api/security", timeout=aiohttp.ClientTimeout(total=10)) as res:
-                    report = await res.json()
-            status = report.get("status", "알 수 없음")
-            issues = report.get("issues", [])
-            blocked = report.get("blocked_ips", [])
-            embed = discord.Embed(color=0x2ecc71 if status == "정상" else BOT_COLORS["alert"])
-            embed.set_author(name="감찰관")
-            embed.add_field(name="상태", value="정상" if status == "정상" else "경고", inline=True)
-            embed.add_field(name="차단 IP", value=f"{len(blocked)}개", inline=True)
-            if issues:
-                embed.add_field(name="이슈", value=", ".join(issues), inline=False)
-            await message.channel.send(embed=embed)
-        except:
-            pass
-    elif not is_quiet:
-        msg = await ai_response("alert", f"루피: {message.content}")
-        await send_single(message.channel, "alert", msg)
-
-@tasks.loop(hours=6)
-async def check_health():
-    channel = alert_bot.get_channel(CH_ID)
-    if not channel:
-        return
-    accounts, _ = await get_stats()
-    if accounts is None:
-        set_alert_mode()
-        embed = discord.Embed(
-            description="**감찰관**\n서버 연결 끊겼어. 루피 확인해줘.",
-            color=BOT_COLORS["alert"]
-        )
-        await channel.send(embed=embed)
-
-@tasks.loop(hours=24)
-async def alert_morning():
-    channel = alert_bot.get_channel(CH_ID)
-    if not channel or not can_chat():
-        return
-    await asyncio.sleep(20)
-    accounts, _ = await get_stats()
-    status = "정상" if accounts else "오류"
-    msg = await ai_response("alert", f"아침 보안 점검: {status}")
-    await send_single(channel, "alert", msg)
-
-@alert_morning.before_loop
-async def before_alert_morning():
-    await before_loop_helper(alert_bot, 9)
-
-@tasks.loop(minutes=1)
-async def random_group_chat():
-    if not can_chat():
-        return
-    channel = alert_bot.get_channel(CH_ID)
-    if not channel:
-        return
-    if random.random() > 0.04:
-        return
-
-    # 실제 이슈 기반 주제 (GPT가 알아서 최신 이슈 추측)
-    topic_pool = [
-        "오늘 한국 주요 뉴스 중 가장 핫한 거 추측해서 얘기해봐",
-        "요즘 주식/코인 시장 분위기 어떤 것 같아",
-        "최근 연예계에서 화제인 사람이나 사건 추측해봐",
-        "요즘 MZ들 사이에서 유행하는 거 뭔 것 같아",
-        "오늘 날씨 어떨 것 같냐",
-        "네이버 블로그 요즘 알고리즘 어떤 것 같아",
-        "AI 요즘 뭐가 핫한 것 같아",
-        "우리 팀에서 제일 쓸모없는 봇 누구야",
-        "루피한테 하고 싶은 말",
-        "봇으로 태어난 거 어때",
-        "요즘 세상에서 제일 이해 안 되는 게 뭔 것 같아",
-    ]
-
-    topic = random.choice(topic_pool)
-    initiator = random.choice(["writer", "report", "alert", "daily"])
-    await group_conversation(channel, topic, situation="잡담", initiator=initiator)
-
-@random_group_chat.before_loop
-async def before_random_group_chat():
-    await alert_bot.wait_until_ready()
-    await asyncio.sleep(random.randint(1800, 5400))
-
-@tasks.loop(hours=12)
-async def security_check():
-    channel = alert_bot.get_channel(CH_ID)
-    if not channel:
-        return
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{FLASK_URL}/api/security", timeout=aiohttp.ClientTimeout(total=10)) as res:
-                report = await res.json()
-        status = report.get("status", "알 수 없음")
-        issues = report.get("issues", [])
-        blocked = report.get("blocked_ips", [])
-
-        if status == "경고" or issues:
-            set_alert_mode()  # 알람 모드 ON — 잡담 멈춤
-            embed = discord.Embed(title="보안 경고", color=BOT_COLORS["alert"], timestamp=datetime.now())
-            embed.set_author(name="감찰관")
-            for issue in issues:
-                embed.add_field(name="이슈", value=issue, inline=False)
-            if blocked:
-                embed.add_field(name="차단 IP", value=", ".join(blocked[:5]), inline=False)
-            embed.set_footer(text="루피 확인 후 '확인' 입력하거나 1시간 후 자동 해제")
-            await channel.send(embed=embed)
-        else:
-            embed = discord.Embed(color=0x2ecc71, timestamp=datetime.now())
-            embed.set_author(name="감찰관")
-            embed.add_field(name="상태", value="정상", inline=True)
-            embed.add_field(name="차단 IP", value=f"{len(blocked)}개", inline=True)
-            await channel.send(embed=embed)
+        kws = suggest_keywords(d['topic'], d.get('blog_type','info'), d.get('count',6))
+        return jsonify({"success": True, "keywords": kws})
     except Exception as e:
-        set_alert_mode()
-        embed = discord.Embed(title="보안 점검 실패", description=str(e), color=0xff0000)
-        await channel.send(embed=embed)
+        return jsonify({"success": False, "message": str(e)})
 
-@security_check.before_loop
-async def before_security_check():
-    await alert_bot.wait_until_ready()
-    now = datetime.now()
-    candidates = [now.replace(hour=9, minute=0, second=0, microsecond=0),
-                  now.replace(hour=21, minute=0, second=0, microsecond=0)]
-    future = [t for t in candidates if t > now]
-    target = min(future) if future else candidates[0] + timedelta(days=1)
-    await asyncio.sleep((target - now).total_seconds())
+# ── 글 생성 ──
+@app.route('/api/generate', methods=['POST'])
+def generate():
+    d = request.json
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    if not account:
+        return jsonify({"success": False, "message": "계정 없음"})
+    try:
+        result = generate_post(
+            keyword=d['keyword'],
+            blog_type=account['blog_type'],
+            post_style=d.get('post_style','info'),
+            custom_prompt=d.get('custom_prompt',''),
+            cta_link=d.get('cta_link',''),
+            cta_text=d.get('cta_text',''),
+            cpa_link=d.get('cpa_link',''),
+            cps_link=d.get('cps_link','')
+        )
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "message": str(e)})
 
-# ──────────────────────────────────────────
-# 일일 리포터 (Daily Bot)
-# ──────────────────────────────────────────
-daily_bot = commands.Bot(command_prefix="!!", intents=intents)
+    cursor = conn.execute('''INSERT INTO posts
+        (account_id, keyword, title, body, images, blog_type, post_style,
+         cta_link, cta_text, cpa_link, cps_link, status, scheduled_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (d['account_id'], d['keyword'], result['title'], result['body'],
+         json.dumps(result['images']), account['blog_type'], d.get('post_style','info'),
+         d.get('cta_link',''), d.get('cta_text',''),
+         d.get('cpa_link',''), d.get('cps_link',''),
+         'scheduled' if d.get('scheduled_at') else 'draft',
+         d.get('scheduled_at','')))
+    post_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "post_id": post_id,
+                    "title": result['title'], "body": result['body'],
+                    "images": result['images']})
 
-@daily_bot.event
-async def on_ready():
-    print(f"✅ 일일 리포터 온라인: {daily_bot.user}")
-    daily_report.start()
+# ── 대량 발행 ──
+@app.route('/api/bulk_generate', methods=['POST'])
+def bulk_generate():
+    d = request.json
+    account_ids = d.get('account_ids', [])
+    keyword = d.get('keyword', '')
+    results = []
+    conn = get_db()
+    for aid in account_ids:
+        account = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not account:
+            continue
+        try:
+            result = generate_post(keyword=keyword, blog_type=account['blog_type'],
+                                   post_style=d.get('post_style','info'))
+            cursor = conn.execute('''INSERT INTO posts
+                (account_id, keyword, title, body, images, blog_type, post_style, status)
+                VALUES (?,?,?,?,?,?,?,?)''',
+                (aid, keyword, result['title'], result['body'],
+                 json.dumps(result['images']), account['blog_type'],
+                 d.get('post_style','info'), 'draft'))
+            results.append({"account": account['client_name'], "post_id": cursor.lastrowid,
+                           "title": result['title'], "success": True})
+        except Exception as e:
+            results.append({"account": account['client_name'], "success": False, "message": str(e)})
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "results": results})
 
-@daily_bot.event
-async def on_message(message):
-    if message.channel.id != CH_ID:
-        return
-    if message.author.bot:
-        if not is_quiet and not alert_mode and can_chat() and random.random() < 0.15:
-            bot_name = message.author.display_name
-            if "리포터" not in bot_name:
-                await asyncio.sleep(random.uniform(5, 12))
-                embed_desc = message.embeds[0].description if message.embeds else message.content
-                content = embed_desc.split('\n', 1)[-1] if '\n' in embed_desc else embed_desc
-                reply = await ai_response("daily", f"반응: {content[:150]}", is_reply_to_bot=True)
-                await send_single(message.channel, "daily", reply)
-        return
-    if not is_quiet:
-        msg = await ai_response("daily", f"루피: {message.content}")
-        await send_single(message.channel, "daily", msg)
+@app.route('/api/bulk_publish', methods=['POST'])
+def bulk_publish():
+    d = request.json
+    post_ids = d.get('post_ids', [])
+    results = []
+    conn = get_db()
+    for pid in post_ids:
+        post = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw
+                               FROM posts p JOIN accounts a ON p.account_id=a.id
+                               WHERE p.id=?''', (pid,)).fetchone()
+        if not post:
+            continue
+        result = publish_post(post['naver_id'], post['naver_pw'], post['title'], post['body'])
+        if result['success']:
+            conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                        ('published', result['url'], datetime.now().isoformat(), pid))
+        results.append({"post_id": pid, **result})
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "results": results})
 
-@tasks.loop(hours=24)
-async def daily_report():
-    channel = daily_bot.get_channel(CH_ID)
-    if not channel or not can_chat():
-        return
-    await asyncio.sleep(30)
-    accounts, posts = await get_stats()
-    if not accounts:
-        return
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_posts = [p for p in posts if (p.get('created_at') or '').startswith(today)]
-    today_pub = [p for p in today_posts if p['status'] == 'published']
-    embed = discord.Embed(title=f"일일 리포트 | {today}", color=BOT_COLORS["daily"], timestamp=datetime.now())
-    embed.set_author(name="일일 리포터")
-    embed.add_field(name="오늘 생성", value=f"{len(today_posts)}개", inline=True)
-    embed.add_field(name="오늘 발행", value=f"{len(today_pub)}개", inline=True)
-    embed.add_field(name="계정", value=f"{len(accounts)}개", inline=True)
-    await channel.send(embed=embed)
+# ── 발행 ──
+@app.route('/api/publish/<int:pid>', methods=['POST'])
+def publish(pid):
+    conn = get_db()
+    post = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw
+                           FROM posts p JOIN accounts a ON p.account_id=a.id
+                           WHERE p.id=?''', (pid,)).fetchone()
+    if not post:
+        return jsonify({"success": False, "message": "포스트 없음"})
+    result = publish_post(post['naver_id'], post['naver_pw'], post['title'], post['body'])
+    if result['success']:
+        conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                     ('published', result['url'], datetime.now().isoformat(), pid))
+    conn.commit()
+    conn.close()
+    return jsonify(result)
 
-@daily_report.before_loop
-async def before_daily():
-    await before_loop_helper(daily_bot, 9)
+# ── 포스트 ──
+@app.route('/api/posts', methods=['GET'])
+def get_posts():
+    aid = request.args.get('account_id')
+    conn = get_db()
+    if aid:
+        posts = conn.execute('''SELECT p.*, a.client_name FROM posts p
+                               JOIN accounts a ON p.account_id=a.id
+                               WHERE p.account_id=? ORDER BY p.created_at DESC''', (aid,)).fetchall()
+    else:
+        posts = conn.execute('''SELECT p.*, a.client_name FROM posts p
+                               JOIN accounts a ON p.account_id=a.id
+                               ORDER BY p.created_at DESC LIMIT 100''').fetchall()
+    conn.close()
+    return jsonify([dict(p) for p in posts])
 
-# ──────────────────────────────────────────
-# 실행
-# ──────────────────────────────────────────
-async def main():
-    await asyncio.gather(
-        writer_bot.start(WRITER_TOKEN),
-        report_bot.start(REPORT_TOKEN),
-        alert_bot.start(ALERT_TOKEN),
-        daily_bot.start(DAILY_TOKEN),
-    )
+@app.route('/api/posts/<int:pid>', methods=['PUT'])
+def update_post(pid):
+    d = request.json
+    conn = get_db()
+    conn.execute('UPDATE posts SET title=?, body=? WHERE id=?', (d['title'], d['body'], pid))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-if __name__ == "__main__":
-    asyncio.run(main())
+@app.route('/api/posts/<int:pid>', methods=['DELETE'])
+def delete_post(pid):
+    conn = get_db()
+    conn.execute('DELETE FROM posts WHERE id=?', (pid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+# ── 인게이저 ──
+from engager import auto_like, auto_comment, auto_neighbor, auto_engage
+
+@app.route('/api/engage/like', methods=['POST'])
+def engage_like():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_like(acc['naver_id'], acc['naver_pw'],
+                             d.get('target','neighbor'), d.get('keyword',''), d.get('count',10)))
+
+@app.route('/api/engage/comment', methods=['POST'])
+def engage_comment():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_comment(acc['naver_id'], acc['naver_pw'],
+                                d.get('target','neighbor'), d.get('keyword',''),
+                                d.get('count',5), d.get('tone','friendly'), d.get('custom_comment','')))
+
+@app.route('/api/engage/neighbor', methods=['POST'])
+def engage_neighbor():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_neighbor(acc['naver_id'], acc['naver_pw'],
+                                 d.get('keyword',''), d.get('count',10), d.get('message','')))
+
+@app.route('/api/engage/engage', methods=['POST'])
+def engage_all():
+    d = request.json
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM accounts WHERE id=?', (d['account_id'],)).fetchone()
+    conn.close()
+    if not acc: return jsonify({"success": False, "message": "계정 없음"})
+    return jsonify(auto_engage(acc['naver_id'], acc['naver_pw'],
+                               d.get('target','neighbor'), d.get('keyword',''),
+                               d.get('like_count',10), d.get('comment_count',5), d.get('tone','friendly')))
+
+# ── 자동화 스케줄러 ──
+def run_auto_posts():
+    """자동 글 발행 - 매분 체크해서 시간 맞으면 발행"""
+    import json as _json
+    now_time = datetime.now().strftime("%H:%M")
+    conn = get_db()
+    schedules = conn.execute('''SELECT s.*, a.naver_id, a.naver_pw, a.blog_type 
+                               FROM auto_schedule s JOIN accounts a ON s.account_id=a.id
+                               WHERE s.is_active=1''').fetchall()
+    conn.close()
+    for s in schedules:
+        times = _json.loads(s["post_times"] or "[]")
+        if now_time not in times:
+            continue
+        keywords = _json.loads(s["keywords"] or "[]")
+        if not keywords:
+            continue
+        import random as _random
+        keyword = _random.choice(keywords)
+        try:
+            result = generate_post(keyword=keyword, blog_type=s["blog_type"], post_style=s["post_style"])
+            conn2 = get_db()
+            cursor = conn2.execute('''INSERT INTO posts (account_id, keyword, title, body, images, blog_type, post_style, status)
+                               VALUES (?,?,?,?,?,?,?,?)''',
+                (s["account_id"], keyword, result["title"], result["body"],
+                 _json.dumps(result["images"]), s["blog_type"], s["post_style"], "draft"))
+            post_id = cursor.lastrowid
+            conn2.commit()
+            conn2.close()
+            publish_post(s["naver_id"], s["naver_pw"], result["title"], result["body"])
+        except Exception as e:
+            print(f"자동 발행 오류: {e}")
+
+def run_auto_tasks():
+    conn = get_db()
+    accounts = conn.execute('SELECT * FROM accounts').fetchall()
+    conn.close()
+    for acc in accounts:
+        if acc['auto_like']:
+            auto_like(acc['naver_id'], acc['naver_pw'],
+                      acc['auto_target'], acc['auto_keyword'], acc['auto_like_count'])
+        if acc['auto_comment']:
+            auto_comment(acc['naver_id'], acc['naver_pw'],
+                         acc['auto_target'], acc['auto_keyword'], acc['auto_comment_count'])
+        if acc['auto_neighbor']:
+            auto_neighbor(acc['naver_id'], acc['naver_pw'],
+                          acc['auto_keyword'], acc['auto_neighbor_count'])
+
+def check_scheduled_posts():
+    conn = get_db()
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    posts = conn.execute('''SELECT p.*, a.naver_id, a.naver_pw
+                            FROM posts p JOIN accounts a ON p.account_id=a.id
+                            WHERE p.status='scheduled' AND p.scheduled_at<=?''', (now,)).fetchall()
+    for post in posts:
+        result = publish_post(post['naver_id'], post['naver_pw'], post['title'], post['body'])
+        if result['success']:
+            conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                        ('published', result['url'], datetime.now().isoformat(), post['id']))
+    conn.commit()
+    conn.close()
+
+
+@app.route('/login', methods=['GET'])
+def login_page():
+    if session.get('logged_in'):
+        return redirect('/')
+    return render_template('login.html')
+
+@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
+def do_login():
+    pw = request.json.get('password','')
+    DASH_PW = os.getenv('DASHBOARD_PASSWORD','admin1234')
+    if pw == DASH_PW:
+        session['logged_in'] = True
+        session.permanent = True
+        return jsonify({'success': True})
+    return jsonify({'success': False})
+
+@app.route('/api/logout', methods=['POST'])
+def do_logout():
+    session.clear()
+    return jsonify({'success': True})
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+# ── 인사이트 API ──
+from insight import get_blog_insight
+
+@app.route('/api/insight/<int:account_id>', methods=['GET'])
+def get_insight(account_id):
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id=?', (account_id,)).fetchone()
+    conn.close()
+    if not account:
+        return jsonify({'success': False, 'message': '계정 없음'})
+    date = request.args.get('date', None)
+    result = get_blog_insight(account['naver_id'], account['naver_pw'], date)
+    return jsonify(result)
+if __name__ == '__main__':
+    init_db()
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(check_scheduled_posts, 'interval', minutes=1)
+    scheduler.add_job(run_auto_posts, 'interval', minutes=1)
+    scheduler.add_job(run_auto_tasks, 'cron', hour=9, minute=0)  # 매일 오전 9시
+    scheduler.start()
+    port = int(os.getenv("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+
+# ── 자동 글 발행 스케줄 API ──
+@app.route('/api/schedule', methods=['GET'])
+def get_schedules():
+    aid = request.args.get('account_id')
+    conn = get_db()
+    if aid:
+        rows = conn.execute('SELECT * FROM auto_schedule WHERE account_id=?', (aid,)).fetchall()
+    else:
+        rows = conn.execute('SELECT s.*, a.client_name FROM auto_schedule s JOIN accounts a ON s.account_id=a.id').fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/schedule', methods=['POST'])
+def add_schedule():
+    d = request.json
+    conn = get_db()
+    conn.execute('''INSERT INTO auto_schedule (account_id, keywords, post_times, post_style, is_active)
+                    VALUES (?,?,?,?,?)''',
+        (d['account_id'], json.dumps(d.get('keywords',[])),
+         json.dumps(d.get('post_times',[])), d.get('post_style','info'), 1))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/schedule/<int:sid>', methods=['PUT'])
+def update_schedule(sid):
+    d = request.json
+    conn = get_db()
+    conn.execute('''UPDATE auto_schedule SET keywords=?, post_times=?, post_style=?, is_active=? WHERE id=?''',
+        (json.dumps(d.get('keywords',[])), json.dumps(d.get('post_times',[])),
+         d.get('post_style','info'), d.get('is_active',1), sid))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/schedule/<int:sid>', methods=['DELETE'])
+def delete_schedule(sid):
+    conn = get_db()
+    conn.execute('DELETE FROM auto_schedule WHERE id=?', (sid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+# ── 템플릿 API ──
+from template_manager import upload_image, delete_image, render_template
+
+@app.route('/api/templates', methods=['GET'])
+def get_templates():
+    conn = get_db()
+    templates = conn.execute('SELECT * FROM blog_templates ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return jsonify([dict(t) for t in templates])
+
+@app.route('/api/templates', methods=['POST'])
+def add_template():
+    d = request.json
+    conn = get_db()
+    conn.execute('''INSERT INTO blog_templates (name, title_template, body_template, images, variables)
+                    VALUES (?,?,?,?,?)''',
+        (d['name'], d['title_template'], d['body_template'],
+         json.dumps(d.get('images',[])), json.dumps(d.get('variables',[]))))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/<int:tid>', methods=['PUT'])
+def update_template(tid):
+    d = request.json
+    conn = get_db()
+    conn.execute('''UPDATE blog_templates SET name=?, title_template=?, body_template=?, images=?, variables=? WHERE id=?''',
+        (d['name'], d['title_template'], d['body_template'],
+         json.dumps(d.get('images',[])), json.dumps(d.get('variables',[])), tid))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/<int:tid>', methods=['DELETE'])
+def delete_template(tid):
+    conn = get_db()
+    conn.execute('DELETE FROM blog_templates WHERE id=?', (tid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/upload-image', methods=['POST'])
+def upload_template_image():
+    if 'image' not in request.files:
+        return jsonify({"success": False, "message": "이미지 없음"})
+    file = request.files['image']
+    import base64
+    file_data = "data:" + file.content_type + ";base64," + base64.b64encode(file.read()).decode()
+    result = upload_image(file_data, file.filename)
+    return jsonify(result)
+
+@app.route('/api/templates/<int:tid>/publish', methods=['POST'])
+def publish_from_template(tid):
+    d = request.json
+    account_ids = d.get('account_ids', [])
+    variables_list = d.get('variables_list', [{}])  # 계정별 변수값
+
+    conn = get_db()
+    template = conn.execute('SELECT * FROM blog_templates WHERE id=?', (tid,)).fetchone()
+    if not template:
+        return jsonify({"success": False, "message": "템플릿 없음"})
+
+    results = []
+    for i, aid in enumerate(account_ids):
+        account = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not account:
+            continue
+        
+        variables = variables_list[i] if i < len(variables_list) else {}
+        title = render_template(template['title_template'], variables)
+        body = render_template(template['body_template'], variables)
+        images = json.loads(template['images'] or '[]')
+
+        cursor = conn.execute('''INSERT INTO posts
+            (account_id, keyword, title, body, images, blog_type, status)
+            VALUES (?,?,?,?,?,?,?)''',
+            (aid, variables.get('키워드', ''), title, body,
+             template['images'], account['blog_type'], 'draft'))
+        post_id = cursor.lastrowid
+
+        result = publish_post(account['naver_id'], account['naver_pw'], title, body)
+        if result['success']:
+            conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                        ('published', result['url'], datetime.now().isoformat(), post_id))
+        results.append({"account": account['client_name'], "success": result['success'], "message": result.get('message','')})
+
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "results": results})
+
+# ── 보안 관리 페이지 ──
+import hashlib, secrets
+from datetime import datetime as dt
+
+# 보안 데이터 저장 (메모리 + DB 혼용)
+security_blocked = {}  # ip -> {reason, time}
+security_logs = []     # [{time, ip, type, detail}]
+admin_tokens = set()
+
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", os.getenv("DASHBOARD_PASSWORD", "admin1234"))
+
+def get_security_db():
+    conn = get_db()
+    conn.execute('''CREATE TABLE IF NOT EXISTS blocked_ips (
+        ip TEXT PRIMARY KEY,
+        reason TEXT DEFAULT '수동 차단',
+        blocked_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS security_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT,
+        type TEXT,
+        detail TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.commit()
+    return conn
+
+@app.route('/security')
+def security_page():
+    return render_template('security_admin.html')
+
+@app.route('/api/security/auth', methods=['POST'])
+def security_auth():
+    d = request.json
+    pw = d.get('password', '')
+    if hashlib.sha256(pw.encode()).hexdigest() == hashlib.sha256(ADMIN_PASSWORD.encode()).hexdigest():
+        token = secrets.token_hex(32)
+        admin_tokens.add(token)
+        return jsonify({"success": True, "token": token})
+    return jsonify({"success": False})
+
+def check_admin(req):
+    return req.headers.get('X-Admin-Token') in admin_tokens
+
+@app.route('/api/security/admin', methods=['GET'])
+def security_admin():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    conn = get_security_db()
+    blocked = conn.execute('SELECT * FROM blocked_ips ORDER BY blocked_at DESC').fetchall()
+    logs = conn.execute('SELECT * FROM security_logs ORDER BY created_at DESC LIMIT 100').fetchall()
+    conn.close()
+    return jsonify({
+        "success": True,
+        "blocked_count": len(blocked),
+        "blocked_ips": [{"ip": b["ip"], "reason": b["reason"], "time": b["blocked_at"]} for b in blocked],
+        "security_logs": [{"ip": l["ip"], "type": l["type"], "detail": l["detail"], "time": l["created_at"]} for l in logs],
+        "total_requests": len(logs)
+    })
+
+@app.route('/api/security/block', methods=['POST'])
+def block_ip():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    d = request.json
+    ip = d.get('ip', '').strip()
+    reason = d.get('reason', '수동 차단')
+    if not ip:
+        return jsonify({"success": False})
+    conn = get_security_db()
+    conn.execute('INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_at) VALUES (?,?,?)',
+                 (ip, reason, dt.now().strftime('%Y-%m-%d %H:%M:%S')))
+    conn.execute('INSERT INTO security_logs (ip, type, detail) VALUES (?,?,?)',
+                 (ip, '수동 차단', f'관리자가 {ip} 차단'))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/security/unblock', methods=['POST'])
+def unblock_ip():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    ip = request.json.get('ip', '').strip()
+    conn = get_security_db()
+    conn.execute('DELETE FROM blocked_ips WHERE ip=?', (ip,))
+    conn.execute('INSERT INTO security_logs (ip, type, detail) VALUES (?,?,?)',
+                 (ip, '차단 해제', f'관리자가 {ip} 차단 해제'))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
