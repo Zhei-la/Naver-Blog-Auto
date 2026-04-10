@@ -417,6 +417,7 @@ def login_page():
         return redirect('/')
     return render_template('login.html')
 
+@app.route('/login', methods=['POST'])
 @app.route('/api/login', methods=['POST'])
 def do_login():
     pw = request.json.get('password','')
