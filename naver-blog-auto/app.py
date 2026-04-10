@@ -8,6 +8,16 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+
+@app.before_request
+def check_login():
+    public = ['/login', '/api/login', '/static']
+    if any(request.path.startswith(p) for p in public):
+        return
+    if not session.get('logged_in'):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'unauthorized'}), 401
+        return redirect('/login')
 DB = "/app/data/blog.db"
 
 def init_db():
@@ -28,6 +38,12 @@ def init_db():
         auto_target TEXT DEFAULT 'neighbor',
         auto_keyword TEXT DEFAULT '',
         keywords TEXT DEFAULT '[]',
+        grade TEXT DEFAULT 'basic',
+        memo TEXT DEFAULT '',
+        target_audience TEXT DEFAULT '',
+        monthly_goal INTEGER DEFAULT 0,
+        contract_start TEXT DEFAULT '',
+        special_notes TEXT DEFAULT '',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS posts (
@@ -49,10 +65,20 @@ def init_db():
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         published_at TEXT
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS blog_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        title_template TEXT NOT NULL,
+        body_template TEXT NOT NULL,
+        images TEXT DEFAULT '[]',
+        variables TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS auto_schedule (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         account_id INTEGER NOT NULL,
         keywords TEXT DEFAULT '[]',
+        grade TEXT DEFAULT 'basic',
         post_times TEXT DEFAULT '[]',
         post_style TEXT DEFAULT 'info',
         is_active INTEGER DEFAULT 1,
@@ -89,7 +115,9 @@ def add_account():
          d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
          d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
          d.get('auto_target','neighbor'), d.get('auto_keyword',''),
-         _json.dumps(d.get('keywords',[]))))
+         _json.dumps(d.get('keywords',[])),
+         d.get('memo',''), d.get('target_audience',''),
+         d.get('monthly_goal',0), d.get('contract_start',''), d.get('special_notes','')))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -103,12 +131,12 @@ def update_account(aid):
         client_name=?, naver_id=?, blog_type=?,
         auto_like=?, auto_comment=?, auto_neighbor=?,
         auto_like_count=?, auto_comment_count=?, auto_neighbor_count=?,
-        auto_target=?, auto_keyword=?, keywords=? WHERE id=?''',
+        auto_target=?, auto_keyword=?, keywords=?, grade=? WHERE id=?''',
         (d.get('client_name',''), d.get('naver_id',''), d.get('blog_type','info'),
          d.get('auto_like',0), d.get('auto_comment',0), d.get('auto_neighbor',0),
          d.get('auto_like_count',10), d.get('auto_comment_count',5), d.get('auto_neighbor_count',5),
          d.get('auto_target','neighbor'), d.get('auto_keyword',''),
-         _json.dumps(d.get('keywords',[])), aid))
+         _json.dumps(d.get('keywords',[])), d.get('grade','basic'), aid))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -382,10 +410,47 @@ def check_scheduled_posts():
     conn.commit()
     conn.close()
 
+
+@app.route('/login', methods=['GET'])
+def login_page():
+    if session.get('logged_in'):
+        return redirect('/')
+    return render_template('login.html')
+
+@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
+def do_login():
+    pw = request.json.get('password','')
+    DASH_PW = os.getenv('DASHBOARD_PASSWORD','admin1234')
+    if pw == DASH_PW:
+        session['logged_in'] = True
+        session.permanent = True
+        return jsonify({'success': True})
+    return jsonify({'success': False})
+
+@app.route('/api/logout', methods=['POST'])
+def do_logout():
+    session.clear()
+    return jsonify({'success': True})
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+
+# ── 인사이트 API ──
+from insight import get_blog_insight
+
+@app.route('/api/insight/<int:account_id>', methods=['GET'])
+def get_insight(account_id):
+    conn = get_db()
+    account = conn.execute('SELECT * FROM accounts WHERE id=?', (account_id,)).fetchone()
+    conn.close()
+    if not account:
+        return jsonify({'success': False, 'message': '계정 없음'})
+    date = request.args.get('date', None)
+    result = get_blog_insight(account['naver_id'], account['naver_pw'], date)
+    return jsonify(result)
 if __name__ == '__main__':
     init_db()
     scheduler = BackgroundScheduler()
@@ -435,6 +500,188 @@ def update_schedule(sid):
 def delete_schedule(sid):
     conn = get_db()
     conn.execute('DELETE FROM auto_schedule WHERE id=?', (sid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+# ── 템플릿 API ──
+from template_manager import upload_image, delete_image, render_template
+
+@app.route('/api/templates', methods=['GET'])
+def get_templates():
+    conn = get_db()
+    templates = conn.execute('SELECT * FROM blog_templates ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return jsonify([dict(t) for t in templates])
+
+@app.route('/api/templates', methods=['POST'])
+def add_template():
+    d = request.json
+    conn = get_db()
+    conn.execute('''INSERT INTO blog_templates (name, title_template, body_template, images, variables)
+                    VALUES (?,?,?,?,?)''',
+        (d['name'], d['title_template'], d['body_template'],
+         json.dumps(d.get('images',[])), json.dumps(d.get('variables',[]))))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/<int:tid>', methods=['PUT'])
+def update_template(tid):
+    d = request.json
+    conn = get_db()
+    conn.execute('''UPDATE blog_templates SET name=?, title_template=?, body_template=?, images=?, variables=? WHERE id=?''',
+        (d['name'], d['title_template'], d['body_template'],
+         json.dumps(d.get('images',[])), json.dumps(d.get('variables',[])), tid))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/<int:tid>', methods=['DELETE'])
+def delete_template(tid):
+    conn = get_db()
+    conn.execute('DELETE FROM blog_templates WHERE id=?', (tid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/templates/upload-image', methods=['POST'])
+def upload_template_image():
+    if 'image' not in request.files:
+        return jsonify({"success": False, "message": "이미지 없음"})
+    file = request.files['image']
+    import base64
+    file_data = "data:" + file.content_type + ";base64," + base64.b64encode(file.read()).decode()
+    result = upload_image(file_data, file.filename)
+    return jsonify(result)
+
+@app.route('/api/templates/<int:tid>/publish', methods=['POST'])
+def publish_from_template(tid):
+    d = request.json
+    account_ids = d.get('account_ids', [])
+    variables_list = d.get('variables_list', [{}])  # 계정별 변수값
+
+    conn = get_db()
+    template = conn.execute('SELECT * FROM blog_templates WHERE id=?', (tid,)).fetchone()
+    if not template:
+        return jsonify({"success": False, "message": "템플릿 없음"})
+
+    results = []
+    for i, aid in enumerate(account_ids):
+        account = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not account:
+            continue
+        
+        variables = variables_list[i] if i < len(variables_list) else {}
+        title = render_template(template['title_template'], variables)
+        body = render_template(template['body_template'], variables)
+        images = json.loads(template['images'] or '[]')
+
+        cursor = conn.execute('''INSERT INTO posts
+            (account_id, keyword, title, body, images, blog_type, status)
+            VALUES (?,?,?,?,?,?,?)''',
+            (aid, variables.get('키워드', ''), title, body,
+             template['images'], account['blog_type'], 'draft'))
+        post_id = cursor.lastrowid
+
+        result = publish_post(account['naver_id'], account['naver_pw'], title, body)
+        if result['success']:
+            conn.execute('UPDATE posts SET status=?, published_url=?, published_at=? WHERE id=?',
+                        ('published', result['url'], datetime.now().isoformat(), post_id))
+        results.append({"account": account['client_name'], "success": result['success'], "message": result.get('message','')})
+
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "results": results})
+
+# ── 보안 관리 페이지 ──
+import hashlib, secrets
+from datetime import datetime as dt
+
+# 보안 데이터 저장 (메모리 + DB 혼용)
+security_blocked = {}  # ip -> {reason, time}
+security_logs = []     # [{time, ip, type, detail}]
+admin_tokens = set()
+
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", os.getenv("DASHBOARD_PASSWORD", "admin1234"))
+
+def get_security_db():
+    conn = get_db()
+    conn.execute('''CREATE TABLE IF NOT EXISTS blocked_ips (
+        ip TEXT PRIMARY KEY,
+        reason TEXT DEFAULT '수동 차단',
+        blocked_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS security_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT,
+        type TEXT,
+        detail TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.commit()
+    return conn
+
+@app.route('/security')
+def security_page():
+    return render_template('security_admin.html')
+
+@app.route('/api/security/auth', methods=['POST'])
+def security_auth():
+    d = request.json
+    pw = d.get('password', '')
+    if hashlib.sha256(pw.encode()).hexdigest() == hashlib.sha256(ADMIN_PASSWORD.encode()).hexdigest():
+        token = secrets.token_hex(32)
+        admin_tokens.add(token)
+        return jsonify({"success": True, "token": token})
+    return jsonify({"success": False})
+
+def check_admin(req):
+    return req.headers.get('X-Admin-Token') in admin_tokens
+
+@app.route('/api/security/admin', methods=['GET'])
+def security_admin():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    conn = get_security_db()
+    blocked = conn.execute('SELECT * FROM blocked_ips ORDER BY blocked_at DESC').fetchall()
+    logs = conn.execute('SELECT * FROM security_logs ORDER BY created_at DESC LIMIT 100').fetchall()
+    conn.close()
+    return jsonify({
+        "success": True,
+        "blocked_count": len(blocked),
+        "blocked_ips": [{"ip": b["ip"], "reason": b["reason"], "time": b["blocked_at"]} for b in blocked],
+        "security_logs": [{"ip": l["ip"], "type": l["type"], "detail": l["detail"], "time": l["created_at"]} for l in logs],
+        "total_requests": len(logs)
+    })
+
+@app.route('/api/security/block', methods=['POST'])
+def block_ip():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    d = request.json
+    ip = d.get('ip', '').strip()
+    reason = d.get('reason', '수동 차단')
+    if not ip:
+        return jsonify({"success": False})
+    conn = get_security_db()
+    conn.execute('INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_at) VALUES (?,?,?)',
+                 (ip, reason, dt.now().strftime('%Y-%m-%d %H:%M:%S')))
+    conn.execute('INSERT INTO security_logs (ip, type, detail) VALUES (?,?,?)',
+                 (ip, '수동 차단', f'관리자가 {ip} 차단'))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route('/api/security/unblock', methods=['POST'])
+def unblock_ip():
+    if not check_admin(request):
+        return jsonify({"success": False}), 401
+    ip = request.json.get('ip', '').strip()
+    conn = get_security_db()
+    conn.execute('DELETE FROM blocked_ips WHERE ip=?', (ip,))
+    conn.execute('INSERT INTO security_logs (ip, type, detail) VALUES (?,?,?)',
+                 (ip, '차단 해제', f'관리자가 {ip} 차단 해제'))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
