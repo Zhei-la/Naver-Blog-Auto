@@ -2197,7 +2197,7 @@ let draftAdminToken = '';
 async function loadIPManager() {
   // 토큰 없으면 로그인 먼저
   if (!draftAdminToken) {
-    const pw = prompt('원고 작성기 관리자 비밀번호를 입력하세요:');
+    const pw = prompt('IP 차단 관리 비밀번호를 입력하세요:');
     if (pw === null || pw === '') {
       toast('비밀번호를 입력해야 접근할 수 있어요', 'error');
       showPage('dashboard');
@@ -2317,7 +2317,7 @@ let cafeAdminToken = '';
 
 async function loadCafeIPManager() {
   if (!cafeAdminToken) {
-    const pw = prompt('카페 원고 작성기 관리자 비밀번호:');
+    const pw = prompt('카페 IP 차단 관리 비밀번호를 입력하세요:');
     if (pw === null || pw === '') {
       toast('비밀번호를 입력해야 접근할 수 있어요', 'error');
       return;
@@ -2461,7 +2461,7 @@ async function loadCodeManager() {
 
 async function getBlogToken() {
   if(blogToken) return blogToken;
-  const pw = prompt('원고 작성기 관리자 비밀번호:');
+  const pw = prompt('관리자 비밀번호를 입력하세요:');
   if(!pw) return null;
   const res = await fetch(BLOG_DRAFT + '/api/security/auth', {
     method: 'POST', headers: {'Content-Type':'application/json'},
@@ -2504,7 +2504,7 @@ async function loadBlogCode() {
 
 async function loadCafeStats() {
   if(!cafeToken) {
-    const pw = prompt('카페 원고 작성기 관리자 비밀번호:');
+    const pw = prompt('카페 IP 차단 관리 비밀번호를 입력하세요:');
     if(!pw) return;
     const res = await fetch(CAFE_DRAFT + '/api/security/auth', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -2585,6 +2585,14 @@ async function regenerateCode() {
     document.getElementById('current-code-display').textContent = d1.code;
     toast('새 코드: ' + d1.code, 'success');
   }
+}
+
+
+function doLogout() {
+  if(!confirm('로그아웃 하시겠어요?')) return;
+  fetch('/api/logout', {method:'POST'}).finally(() => {
+    window.location.href = '/login';
+  });
 }
 
 loadAccountsData(); loadDashboard();
