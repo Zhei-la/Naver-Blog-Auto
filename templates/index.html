@@ -172,9 +172,72 @@ tr:hover td { background:var(--s2); }
 
 .divider { border:none; border-top:1px solid var(--border); margin:12px 0; }
 .section-label { font-size:10px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+
+/* ── 모바일 사이드바 ── */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    height: 100vh;
+    z-index: 200;
+    transition: left 0.3s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+  }
+  .sidebar.open {
+    left: 0;
+  }
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 199;
+  }
+  .sidebar-overlay.show {
+    display: block;
+  }
+  .mobile-menu-btn {
+    display: flex !important;
+  }
+}
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 300;
+  width: 40px;
+  height: 40px;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+}
+.mobile-menu-btn span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: all 0.3s;
+}
 </style>
 </head>
 <body>
+<button class="mobile-menu-btn" onclick="toggleSidebar()">
+  <span></span><span></span><span></span>
+</button>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <div class="layout">
 
 <!-- 사이드바 -->
@@ -188,6 +251,7 @@ tr:hover td { background:var(--s2); }
     <div class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard">📊 대시보드</div>
     <div class="nav-item" onclick="showPage('accounts')" data-page="accounts">👤 계정 관리</div>
     <div class="nav-item" onclick="showPage('ip-manager')" data-page="ip-manager">🚫 IP 차단 관리</div>
+    <div class="nav-item" onclick="showPage('code-manager')" data-page="code-manager">🔑 코드 관리</div>
     <div class="nav-section">글 작성</div>
     <div class="nav-item" onclick="showPage('generate')" data-page="generate">✍️ 글 생성</div>
     <div class="nav-item" onclick="showPage('bulk')" data-page="bulk">📦 대량 발행</div>
@@ -661,6 +725,47 @@ tr:hover td { background:var(--s2); }
       <div id="cafe-security-logs"><div class="empty"><div class="empty-text">로그 없음</div></div></div>
     </div>
   </div>
+
+  <!-- 코드 관리 -->
+  <div class="page" id="page-code-manager">
+    <div class="page-header">
+      <div class="page-title">코드 <span>관리</span></div>
+      <button class="btn btn-primary" onclick="loadCodeManager()">🔄 새로고침</button>
+    </div>
+
+    <!-- 현재 코드 -->
+    <div class="card" style="margin-bottom:14px;text-align:center;">
+      <div class="card-title" style="margin-bottom:20px;">🔑 현재 이용 코드</div>
+      <div id="current-code-display" style="font-family:monospace;font-size:40px;font-weight:700;color:var(--gold);letter-spacing:6px;margin-bottom:8px;">-</div>
+      <div id="code-generated-at" style="font-size:12px;color:var(--dim);margin-bottom:20px;"></div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="copyCode()">📋 코드 복사</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetSession()" style="color:var(--yellow);border-color:var(--yellow);">⚡ 세션 초기화</button>
+        <button class="btn btn-danger btn-sm" onclick="regenerateCode()">🔄 코드 재생성</button>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--dim);">매월 1일 자동 재생성 · 세션 초기화하면 모든 사용자가 코드 재입력 필요</div>
+    </div>
+
+    <!-- 오늘 통계 요약 -->
+    <div class="stats-row" style="margin-bottom:14px;">
+      <div class="stat-card"><div class="stat-val" id="blog-today-visitors" style="color:var(--green);">-</div><div class="stat-lbl">원고작성기 방문</div></div>
+      <div class="stat-card"><div class="stat-val" id="blog-today-generates" style="color:var(--gold);">-</div><div class="stat-lbl">원고작성기 생성</div></div>
+      <div class="stat-card"><div class="stat-val" id="cafe-today-visitors" style="color:var(--green);">-</div><div class="stat-lbl">카페작성기 방문</div></div>
+      <div class="stat-card"><div class="stat-val" id="cafe-today-generates" style="color:var(--gold);">-</div><div class="stat-lbl">카페작성기 생성</div></div>
+    </div>
+
+    <!-- 원고 작성기 통계 -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">📝 원고 작성기 — 최근 7일</div>
+      <div id="blog-weekly-table"><div class="empty"><div class="empty-text">로딩 중...</div></div></div>
+    </div>
+
+    <!-- 카페 원고 작성기 통계 -->
+    <div class="card">
+      <div class="card-title">☕ 카페 원고 작성기 — 최근 7일</div>
+      <div id="cafe-weekly-table"><div class="empty"><div class="empty-text">로딩 중...</div></div></div>
+    </div>
+  </div>
 </main>
 </div>
 
@@ -960,6 +1065,7 @@ function showPage(name) {
   if (name === 'schedule') loadSchedules();
   if (name === 'template') { loadTemplates(); loadAccountsData(); }
   if (name === 'ip-manager') loadIPManager();
+  if (name === 'code-manager') loadCodeManager();
   if (name === 'insight') { loadAccountsData(); const sel = document.getElementById('insight-account'); if (!sel.options.length || sel.options[0].value === '') { const first = sel.options[0]; sel.innerHTML = ''; sel.appendChild(first); accounts.forEach(a => { const o = document.createElement('option'); o.value=a.id; o.textContent=a.client_name+' ('+a.naver_id+')'; sel.appendChild(o); }); } }
   if (name === 'bulk') renderBulkAccounts();
 }
@@ -2342,7 +2448,167 @@ function renderAccountTable(list) {
     + '</tbody></table></div>';
 }
 
+
+// ── 코드 관리 ──
+const BLOG_DRAFT = 'https://blog-draft-production.up.railway.app';
+const CAFE_DRAFT = 'https://cafe-draft-production.up.railway.app';
+let blogToken = '';
+let cafeToken = '';
+
+async function loadCodeManager() {
+  await Promise.all([loadBlogCode(), loadCafeStats()]);
+}
+
+async function getBlogToken() {
+  if(blogToken) return blogToken;
+  const pw = prompt('원고 작성기 관리자 비밀번호:');
+  if(!pw) return null;
+  const res = await fetch(BLOG_DRAFT + '/api/security/auth', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({password: pw})
+  });
+  const data = await res.json();
+  if(data.success) { blogToken = data.token; return blogToken; }
+  toast('비밀번호 오류', 'error'); return null;
+}
+
+async function loadBlogCode() {
+  const token = await getBlogToken();
+  if(!token) return;
+  try {
+    const res = await fetch(BLOG_DRAFT + '/api/code/current', {
+      headers: {'X-Admin-Token': token}
+    });
+    const data = await res.json();
+    if(!data.success) { blogToken = ''; return; }
+
+    document.getElementById('current-code-display').textContent = data.code;
+    document.getElementById('code-generated-at').textContent = '생성일: ' + data.generated_at;
+    document.getElementById('blog-today-visitors').textContent = data.today_visitors;
+    document.getElementById('blog-today-generates').textContent = data.today_generates;
+
+    // 주간 테이블
+    const tbody = document.getElementById('blog-weekly-table');
+    if(data.weekly && data.weekly.length) {
+      tbody.innerHTML = '<div class="table-wrap"><table><thead><tr><th>날짜</th><th>방문자</th><th>글 생성</th><th>코드 사용</th></tr></thead><tbody>'
+        + data.weekly.map(d => `<tr>
+          <td style="color:var(--dim);font-size:12px;">${d.date}</td>
+          <td style="color:var(--green);font-weight:700;">${d.visitors}명</td>
+          <td style="color:var(--gold);font-weight:700;">${d.generates}회</td>
+          <td style="color:var(--dim);">${d.code_users}명</td>
+        </tr>`).join('')
+        + '</tbody></table></div>';
+    }
+  } catch(e) { toast('원고 작성기 로드 실패', 'error'); }
+}
+
+async function loadCafeStats() {
+  if(!cafeToken) {
+    const pw = prompt('카페 원고 작성기 관리자 비밀번호:');
+    if(!pw) return;
+    const res = await fetch(CAFE_DRAFT + '/api/security/auth', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({password: pw})
+    });
+    const data = await res.json();
+    if(!data.success) { toast('비밀번호 오류', 'error'); return; }
+    cafeToken = data.token;
+  }
+  try {
+    const res = await fetch(CAFE_DRAFT + '/api/code/current', {
+      headers: {'X-Admin-Token': cafeToken}
+    });
+    const data = await res.json();
+    if(!data.success) { cafeToken = ''; return; }
+
+    document.getElementById('cafe-today-visitors').textContent = data.today_visitors;
+    document.getElementById('cafe-today-generates').textContent = data.today_generates;
+
+    const tbody = document.getElementById('cafe-weekly-table');
+    if(data.weekly && data.weekly.length) {
+      tbody.innerHTML = '<div class="table-wrap"><table><thead><tr><th>날짜</th><th>방문자</th><th>글 생성</th><th>코드 사용</th></tr></thead><tbody>'
+        + data.weekly.map(d => `<tr>
+          <td style="color:var(--dim);font-size:12px;">${d.date}</td>
+          <td style="color:var(--green);font-weight:700;">${d.visitors}명</td>
+          <td style="color:var(--gold);font-weight:700;">${d.generates}회</td>
+          <td style="color:var(--dim);">${d.code_users}명</td>
+        </tr>`).join('')
+        + '</tbody></table></div>';
+    }
+  } catch(e) { toast('카페 작성기 로드 실패', 'error'); }
+}
+
+function copyCode() {
+  const code = document.getElementById('current-code-display').textContent;
+  if(code === '-') return;
+  navigator.clipboard.writeText(code).then(() => toast('코드 복사됐어요!', 'success'));
+}
+
+async function resetSession() {
+  if(!confirm('세션을 초기화하면 모든 사용자가 코드를 다시 입력해야 해요. 계속할까요?')) return;
+  const token = await getBlogToken();
+  if(!token) return;
+
+  const r1 = await fetch(BLOG_DRAFT + '/api/session/reset', {
+    method: 'POST', headers: {'X-Admin-Token': token}
+  });
+  const d1 = await r1.json();
+
+  if(cafeToken) {
+    await fetch(CAFE_DRAFT + '/api/session/reset', {
+      method: 'POST', headers: {'X-Admin-Token': cafeToken}
+    });
+  }
+
+  if(d1.success) toast('세션 초기화 완료! 모든 사용자가 재입력해야 해요', 'success');
+}
+
+async function regenerateCode() {
+  if(!confirm('코드를 재생성하면 기존 코드로 접속 중인 사용자는 재입력이 필요해요. 계속할까요?')) return;
+  const token = await getBlogToken();
+  if(!token) return;
+
+  // blog-draft 재생성
+  const r1 = await fetch(BLOG_DRAFT + '/api/code/regenerate', {
+    method: 'POST', headers: {'X-Admin-Token': token}
+  });
+  const d1 = await r1.json();
+
+  // cafe-draft도 동일 코드로 설정 (별도 요청)
+  if(cafeToken) {
+    await fetch(CAFE_DRAFT + '/api/code/regenerate', {
+      method: 'POST', headers: {'X-Admin-Token': cafeToken}
+    });
+  }
+
+  if(d1.success) {
+    document.getElementById('current-code-display').textContent = d1.code;
+    toast('새 코드: ' + d1.code, 'success');
+  }
+}
+
 loadAccountsData(); loadDashboard();
+
+// ── 모바일 사이드바 ──
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('show');
+}
+function closeSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  sidebar.classList.remove('open');
+  overlay.classList.remove('show');
+}
+// 메뉴 클릭시 사이드바 닫기 (모바일)
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    if(window.innerWidth <= 768) closeSidebar();
+  });
+});
+
 </script>
 </body>
 </html>
