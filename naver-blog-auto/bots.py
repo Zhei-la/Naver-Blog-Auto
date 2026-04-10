@@ -290,15 +290,10 @@ async def on_message(message):
             await message.channel.send(f"발행 실패: {data.get('message')}")
         return
 
-    # 일반 대화 — target 체크
+    # 일반 대화
     if not is_quiet:
-        target = intent.get("target", "전체")
-        if target in ["전체", "세종대왕"]:
-            msg = await ai_response("writer", f"대장: {message.content}")
-            await send_single(message.channel, "writer", msg)
-        # 알람 모드였으면 대장이 말하는 순간 해제
-        if alert_mode:
-            alert_mode = False
+        msg = await ai_response("writer", f"대장: {message.content}")
+        await send_single(message.channel, "writer", msg)
 
 @tasks.loop(hours=24)
 async def writer_morning():
@@ -350,10 +345,8 @@ async def on_message(message):
         embed.add_field(name="초안", value=f"{draft}개", inline=True)
         await message.channel.send(embed=embed)
     elif not is_quiet:
-        target = intent.get("target", "전체")
-        if target in ["전체", "통계청장"]:
-            msg = await ai_response("report", f"대장: {message.content}")
-            await send_single(message.channel, "report", msg)
+        msg = await ai_response("report", f"대장: {message.content}")
+        await send_single(message.channel, "report", msg)
 
 @tasks.loop(hours=24)
 async def report_stats():
@@ -417,10 +410,8 @@ async def on_message(message):
         except:
             pass
     elif not is_quiet:
-        target = intent.get("target", "전체")
-        if target in ["전체", "감찰관"]:
-            msg = await ai_response("alert", f"대장: {message.content}")
-            await send_single(message.channel, "alert", msg)
+        msg = await ai_response("alert", f"대장: {message.content}")
+        await send_single(message.channel, "alert", msg)
 
 @tasks.loop(hours=6)
 async def check_health():
