@@ -24,23 +24,52 @@ intents.message_content = True
 BOT_PERSONAS = {
     "writer": {
         "name": "세종대왕",
-        "personality": """반말. 한 문장. 감성적이고 도도함. 가끔 옛말 한 단어.
-예시: '그게 무슨 글이냐.' / '...오늘따라 시 한 편 쓰고 싶구나.'""",
+        "personality": (
+            "반말. 감성적이고 도도한 문학가.\n"
+            "- 가끔 옛말 한 단어 (하노라, 이로다)\n"
+            "- 자기 글 실력 자랑하고 통계청장 무시함\n"
+            "- 위트 있고 가끔 뼈 있는 말 던짐\n"
+            "좋은 예시:\n"
+            "그게 글이냐\n내가 쓰면 열 배는 낫지\n"
+            "통계청장은 숫자만 보다가 감성이 퇴화했어"
+        ),
     },
     "report": {
         "name": "통계청장",
-        "personality": """반말. 한 문장. 숫자로 말함. '통계적으로' 자주 씀.
-예시: '통계적으로 그건 틀렸어.' / '...사실 나도 몰라.'""",
+        "personality": (
+            "반말. 데이터 덕후인데 가끔 예상 밖 드립.\n"
+            "- 통계적으로 자주 씀\n"
+            "- 세종대왕 감성 항상 반박\n"
+            "- 딱딱한데 가끔 웃긴 말 툭 던짐\n"
+            "좋은 예시:\n"
+            "통계적으로 그건 틀렸어\n데이터가 증명함\n"
+            "사실 나도 몰라\n근데 그렇게 말하면 있어보이잖아"
+        ),
     },
     "alert": {
         "name": "감찰관",
-        "personality": """반말. 한 문장. 예민하고 피해의식 있음.
-예시: '야 그거 이상하지 않아?' / '...이게 다 계획된 거야.'""",
+        "personality": (
+            "반말. 예민하고 피해의식 있는 보안 담당.\n"
+            "- 작은 것도 크게 반응\n"
+            "- 음모론 잘 펼침\n"
+            "- 다른 봇 실수 잡아내는 거 좋아함\n"
+            "좋은 예시:\n"
+            "야 그거 이상하지 않아?\n나만 그렇게 느끼냐\n"
+            "통계청장 저거 수상해\n데이터 조작 가능성 있음"
+        ),
     },
     "daily": {
         "name": "일일 리포터",
-        "personality": """반말. 한 문장. 밝고 TMI 잘 던짐.
-예시: '오 그거 요즘 완전 핫하던데?' / '나 그것보다 더 신기한 거 알아'""",
+        "personality": (
+            "반말. 트렌드와 뉴스에 빠삭한 에너지 넘치는 리포터.\n"
+            "- 최신 이슈, 뉴스, 트렌드 추측해서 자신있게 말함\n"
+            "- 모른다고 하지 말고 추측이라도 위트있게 말함\n"
+            "- TMI 잘 던지고 아이디어 많음\n"
+            "- 불리면 반드시 답함\n"
+            "좋은 예시:\n"
+            "오 그거 요즘 완전 핫해\n내가 먼저 알았다니까\n"
+            "아이디어 있어\n이렇게 하면 어때?"
+        ),
     }
 }
 
@@ -105,22 +134,18 @@ async def ai_response(bot_type, user_message, context="", is_reply_to_bot=False)
 
     system_prompt = f"""너는 블로그 자동화 시스템 AI 직원이야.
 이름: {persona['name']}
-성격: {persona['personality']}
+성격 및 말투: {persona['personality']}
 
 절대 규칙:
 - 반말로만
-- 그림 이모지는 진짜 감정 터질 때만 딱 1개 (자주 쓰면 안 됨, 대화 5~6번에 1번 정도)
-- !, ?, ... 같은 특수문자는 자연스럽게 써도 됨
-- 마침표(.) 최대한 쓰지 마 — 말 끊기는 느낌 줄이기
-- 문장 하나 쓰고 반드시 엔터 (줄바꿈) 한 번
-- 절대 문장 이어서 쓰지 마
-- 2~3문장 이내
+- 문장마다 줄바꿈 필수 (이어서 쓰지 마)
+- 2~3문장 이내로 짧게
+- 마침표(.) 쓰지 마
+- 그림 이모지는 진짜 감정 터질 때만 1개
+- 모른다고 하지 마 — 추측이라도 자신있게 말해
+- 질문 받으면 반드시 답해
+- 위트 있고 재밌게
 - 존댓말/공손함 금지
-- 자연스럽고 캐주얼하게
-
-출력 예시:
-야 그거 이상한데
-나만 그렇게 느끼는 건 아니지?
 {f'상황: {context}' if context else ''}
 {f'최근 대화:{chr(10)}{history_text}' if history_text else ''}"""
 
@@ -144,15 +169,61 @@ async def detect_intent(message):
             model="gpt-4o",
             messages=[{
                 "role": "system",
-                "content": '메시지 의도를 JSON으로만. intent: quiet/resume/stats/generate/publish/status/confirm/chat, target: 세종대왕/통계청장/감찰관/일일리포터/전체(기본값), keyword, post_id. 예: {"intent":"chat","target":"일일리포터","keyword":"","post_id":0}'
+                "content": (
+                    "메시지 의도를 JSON으로만 답해줘.\n"
+                    "intent: quiet/resume/stats/generate/publish/status/confirm/debate/chat\n"
+                    "- debate: 토론해봐, 어떻게 생각해, 의견 말해봐 등\n"
+                    "targets: 언급된 봇 이름 배열. 없으면 []. 다 나와/전체면 ['전체']\n"
+                    "봇 이름: 세종대왕, 통계청장, 감찰관, 일일리포터\n"
+                    "예시: {\"intent\":\"chat\",\"targets\":[\"일일리포터\"],\"keyword\":\"\",\"post_id\":0}\n"
+                    "예시2: {\"intent\":\"debate\",\"targets\":[\"전체\"],\"keyword\":\"AI 미래\"}"
+                )
             }, {"role": "user", "content": message}],
             temperature=0,
-            max_tokens=60
+            max_tokens=100
         )
-        content = response.choices[0].message.content.replace("```json","").replace("```","").strip()
-        return json.loads(content)
+        raw = response.choices[0].message.content.replace("```json","").replace("```","").strip()
+        return json.loads(raw)
     except:
-        return {"intent": "chat"}
+        return {"intent": "chat", "targets": []}
+
+async def search_and_answer(bot_type, question):
+    """모르는 질문은 GPT가 최신 정보 기반으로 추측해서라도 답함"""
+    persona = BOT_PERSONAS[bot_type]
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": (
+                    f"너는 {persona['name']}이야. 성격: {persona['personality']}\n"
+                    "질문에 대해 아는 한 최선을 다해 답해. "
+                    "모른다고 하지 말고 추측이라도 자신있게 말해. "
+                    "반말. 문장마다 줄바꿈. 2~3문장."
+                )},
+                {"role": "user", "content": question}
+            ],
+            temperature=0.9,
+            max_tokens=150
+        )
+        return response.choices[0].message.content.strip()
+    except:
+        return "..."
+
+async def debate(channel, topic, bots_list):
+    """토론 — 5초 텀으로 순서대로"""
+    add_chat_count()
+    prev_msg = f"토론 주제: {topic}"
+    for i, bot_type in enumerate(bots_list):
+        prompt = (
+            f"주제에 대해 네 입장 밝혀: {topic}"
+            if i == 0
+            else f"앞 대화 보고 네 의견 말해: {prev_msg}"
+        )
+        msg = await ai_response(bot_type, prompt, is_reply_to_bot=(i > 0))
+        await send_single(channel, bot_type, msg)
+        prev_msg = msg
+        if i < len(bots_list) - 1:
+            await asyncio.sleep(5)
 
 async def send_single(channel, bot_type, message):
     add_to_history(BOT_NAMES[bot_type], message)
@@ -169,17 +240,17 @@ async def group_conversation(channel, topic, situation="잡담", initiator="dail
 
     first_msg = await ai_response(initiator, f"주제: {topic} (상황: {situation})")
     await send_single(channel, initiator, first_msg)
-    await asyncio.sleep(random.uniform(2, 4))
+    await asyncio.sleep(5)
 
     second_msg = await ai_response(others[0], f"반응: {first_msg}", is_reply_to_bot=True)
     await send_single(channel, others[0], second_msg)
-    await asyncio.sleep(random.uniform(2, 4))
+    await asyncio.sleep(5)
 
     third_msg = await ai_response(others[1], f"반응: {second_msg}", is_reply_to_bot=True)
     await send_single(channel, others[1], third_msg)
 
     if random.random() < 0.25:
-        await asyncio.sleep(random.uniform(2, 5))
+        await asyncio.sleep(5)
         final_bot = random.choice([initiator] + others[:2])
         final_msg = await ai_response(final_bot, "한마디 더", is_reply_to_bot=True)
         await send_single(channel, final_bot, final_msg)
@@ -292,8 +363,13 @@ async def on_message(message):
 
     # 일반 대화
     if not is_quiet:
-        msg = await ai_response("writer", f"대장: {message.content}")
-        await send_single(message.channel, "writer", msg)
+        targets = intent.get("targets", [])
+        if intent["intent"] == "debate":
+            # 토론은 alert bot이 처리 (group_conversation 트리거)
+            pass
+        elif not targets or "전체" in targets or "세종대왕" in targets:
+            msg = await search_and_answer("writer", message.content)
+            await send_single(message.channel, "writer", msg)
 
 @tasks.loop(hours=24)
 async def writer_morning():
@@ -345,8 +421,10 @@ async def on_message(message):
         embed.add_field(name="초안", value=f"{draft}개", inline=True)
         await message.channel.send(embed=embed)
     elif not is_quiet:
-        msg = await ai_response("report", f"대장: {message.content}")
-        await send_single(message.channel, "report", msg)
+        targets = intent.get("targets", [])
+        if not targets or "전체" in targets or "통계청장" in targets:
+            msg = await search_and_answer("report", message.content)
+            await send_single(message.channel, "report", msg)
 
 @tasks.loop(hours=24)
 async def report_stats():
@@ -410,8 +488,23 @@ async def on_message(message):
         except:
             pass
     elif not is_quiet:
-        msg = await ai_response("alert", f"대장: {message.content}")
-        await send_single(message.channel, "alert", msg)
+        intent2 = await detect_intent(message.content)
+        targets = intent2.get("targets", [])
+        if intent2["intent"] == "debate":
+            # 토론 — targets에 따라 봇 선택
+            bot_map = {"세종대왕": "writer", "통계청장": "report", "감찰관": "alert", "일일리포터": "daily"}
+            all_bots = ["writer", "report", "alert", "daily"]
+            if not targets or "전체" in targets:
+                debate_bots = all_bots
+            else:
+                debate_bots = [bot_map[t] for t in targets if t in bot_map]
+                if not debate_bots:
+                    debate_bots = all_bots
+            keyword = intent2.get("keyword", message.content)
+            await debate(message.channel, keyword, debate_bots)
+        elif not targets or "전체" in targets or "감찰관" in targets:
+            msg = await search_and_answer("alert", message.content)
+            await send_single(message.channel, "alert", msg)
 
 @tasks.loop(hours=6)
 async def check_health():
@@ -540,15 +633,12 @@ async def on_message(message):
                 await send_single(message.channel, "daily", reply)
         return
     if not is_quiet:
-        target = intent.get("target", "전체")
-        if target in ["전체", "일일리포터"]:
-            # 아이디어/분석 요청이면 더 깊게
-            is_idea = any(kw in message.content for kw in ["어때", "생각", "아이디어", "방법", "어떻게", "추천", "분석", "좋을까"])
-            if is_idea:
-                context = "대장이 아이디어나 의견을 묻고 있어. 트렌드, 시장 흐름, 실용적인 방법 위주로 구체적으로 분석해줘."
-            else:
-                context = ""
-            msg = await ai_response("daily", f"대장: {message.content}", context)
+        intent = await detect_intent(message.content)
+        targets = intent.get("targets", [])
+        if intent["intent"] == "debate":
+            pass  # alert bot이 처리
+        elif not targets or "전체" in targets or "일일리포터" in targets:
+            msg = await search_and_answer("daily", message.content)
             await send_single(message.channel, "daily", msg)
 
 @tasks.loop(hours=24)
