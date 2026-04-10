@@ -69,7 +69,7 @@ def can_chat():
     if alert_mode and alert_mode_until and datetime.now() > alert_mode_until:
         alert_mode = False
         alert_mode_until = None
-    return not is_quiet and not alert_mode and daily_chat_count < 10
+    return not is_quiet and not alert_mode and daily_chat_count < 2
 
 def set_alert_mode():
     global alert_mode, alert_mode_until
@@ -112,10 +112,15 @@ async def ai_response(bot_type, user_message, context="", is_reply_to_bot=False)
 - 그림 이모지는 진짜 감정 터질 때만 딱 1개 (자주 쓰면 안 됨, 대화 5~6번에 1번 정도)
 - !, ?, ... 같은 특수문자는 자연스럽게 써도 됨
 - 마침표(.) 최대한 쓰지 마 — 말 끊기는 느낌 줄이기
-- 문장 끝나면 반드시 줄바꿈
+- 문장 하나 쓰고 반드시 엔터 (줄바꿈) 한 번
+- 절대 문장 이어서 쓰지 마
 - 2~3문장 이내
 - 존댓말/공손함 금지
 - 자연스럽고 캐주얼하게
+
+출력 예시:
+야 그거 이상한데
+나만 그렇게 느끼는 건 아니지?
 {f'상황: {context}' if context else ''}
 {f'최근 대화:{chr(10)}{history_text}' if history_text else ''}"""
 
@@ -447,22 +452,17 @@ async def random_group_chat():
     channel = alert_bot.get_channel(CH_ID)
     if not channel:
         return
-    if random.random() > 0.04:
+    if random.random() > 0.5:
         return
 
-    # 실제 이슈 기반 주제 (GPT가 알아서 최신 이슈 추측)
+    # 진짜 큰 이슈/뉴스만
     topic_pool = [
-        "오늘 한국 주요 뉴스 중 가장 핫한 거 추측해서 얘기해봐",
-        "요즘 주식/코인 시장 분위기 어떤 것 같아",
-        "최근 연예계에서 화제인 사람이나 사건 추측해봐",
-        "요즘 MZ들 사이에서 유행하는 거 뭔 것 같아",
-        "오늘 날씨 어떨 것 같냐",
-        "네이버 블로그 요즘 알고리즘 어떤 것 같아",
-        "AI 요즘 뭐가 핫한 것 같아",
-        "우리 팀에서 제일 쓸모없는 봇 누구야",
-        "대장한테 하고 싶은 말",
-        "봇으로 태어난 거 어때",
-        "요즘 세상에서 제일 이해 안 되는 게 뭔 것 같아",
+        "오늘 한국에서 터진 제일 큰 뉴스가 뭔지 추측해서 얘기해봐 — 정치, 경제, 사회 다 포함",
+        "요즘 세계적으로 제일 핫한 이슈가 뭔 것 같아 — 전쟁, 경제위기, 기술 등",
+        "최근 한국 경제나 주식시장에서 주목할 만한 이슈 뭔 것 같아",
+        "AI 업계에서 요즘 제일 큰 뉴스나 변화가 뭔 것 같아",
+        "네이버나 카카오 같은 IT 대기업에서 최근 무슨 이슈 있는 것 같아",
+        "요즘 한국 부동산이나 금리 관련해서 핫한 이슈 뭔 것 같아",
     ]
 
     topic = random.choice(topic_pool)
