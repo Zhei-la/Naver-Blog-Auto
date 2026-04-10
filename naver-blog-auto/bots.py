@@ -144,7 +144,7 @@ async def detect_intent(message):
             model="gpt-4o",
             messages=[{
                 "role": "system",
-                "content": '메시지 의도를 JSON으로만. {"intent": "quiet/resume/stats/generate/publish/status/confirm/chat", "keyword": "", "post_id": 0}'
+                "content": '메시지 의도를 JSON으로만. intent: quiet/resume/stats/generate/publish/status/confirm/chat, target: 세종대왕/통계청장/감찰관/일일리포터/전체(기본값), keyword, post_id. 예: {"intent":"chat","target":"일일리포터","keyword":"","post_id":0}'
             }, {"role": "user", "content": message}],
             temperature=0,
             max_tokens=60
@@ -290,10 +290,12 @@ async def on_message(message):
             await message.channel.send(f"발행 실패: {data.get('message')}")
         return
 
-    # 일반 대화
+    # 일반 대화 — target 체크
     if not is_quiet:
-        msg = await ai_response("writer", f"대장: {message.content}")
-        await send_single(message.channel, "writer", msg)
+        target = intent.get("target", "전체")
+        if target in ["전체", "세종대왕"]:
+            msg = await ai_response("writer", f"대장: {message.content}")
+            await send_single(message.channel, "writer", msg)
         # 알람 모드였으면 대장이 말하는 순간 해제
         if alert_mode:
             alert_mode = False
@@ -348,8 +350,10 @@ async def on_message(message):
         embed.add_field(name="초안", value=f"{draft}개", inline=True)
         await message.channel.send(embed=embed)
     elif not is_quiet:
-        msg = await ai_response("report", f"대장: {message.content}")
-        await send_single(message.channel, "report", msg)
+        target = intent.get("target", "전체")
+        if target in ["전체", "통계청장"]:
+            msg = await ai_response("report", f"대장: {message.content}")
+            await send_single(message.channel, "report", msg)
 
 @tasks.loop(hours=24)
 async def report_stats():
@@ -413,8 +417,10 @@ async def on_message(message):
         except:
             pass
     elif not is_quiet:
-        msg = await ai_response("alert", f"대장: {message.content}")
-        await send_single(message.channel, "alert", msg)
+        target = intent.get("target", "전체")
+        if target in ["전체", "감찰관"]:
+            msg = await ai_response("alert", f"대장: {message.content}")
+            await send_single(message.channel, "alert", msg)
 
 @tasks.loop(hours=6)
 async def check_health():
@@ -543,8 +549,16 @@ async def on_message(message):
                 await send_single(message.channel, "daily", reply)
         return
     if not is_quiet:
-        msg = await ai_response("daily", f"대장: {message.content}")
-        await send_single(message.channel, "daily", msg)
+        target = intent.get("target", "전체")
+        if target in ["전체", "일일리포터"]:
+            # 아이디어/분석 요청이면 더 깊게
+            is_idea = any(kw in message.content for kw in ["어때", "생각", "아이디어", "방법", "어떻게", "추천", "분석", "좋을까"])
+            if is_idea:
+                context = "대장이 아이디어나 의견을 묻고 있어. 트렌드, 시장 흐름, 실용적인 방법 위주로 구체적으로 분석해줘."
+            else:
+                context = ""
+            msg = await ai_response("daily", f"대장: {message.content}", context)
+            await send_single(message.channel, "daily", msg)
 
 @tasks.loop(hours=24)
 async def daily_report():
