@@ -1,12 +1,14 @@
+
 @app.before_request
 def check_login():
-    public = ['/login', '/api/login', '/static']
-    if any(request.path.startswith(p) for p in public):
+    # 로그인 불필요 경로
+    public_paths = ['/login', '/api/login', '/api/logout', '/static']
+    if any(request.path.startswith(p) for p in public_paths):
         return
+    # 로그인 체크 - 페이지만 (API는 허용)
     if not session.get('logged_in'):
-        if request.path.startswith('/api/'):
-            return jsonify({'error': 'unauthorized'}), 401
-        return redirect('/login')
+        if not request.path.startswith('/api/'):
+            return redirect('/login')
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from security import rate_limit, sanitize_input, add_security_headers, check_password, security_report, SECRET_KEY
