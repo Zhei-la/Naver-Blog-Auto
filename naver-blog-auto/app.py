@@ -108,10 +108,12 @@ async def ai_response(bot_type, user_message, context="", is_reply_to_bot=False)
 성격: {persona['personality']}
 
 절대 규칙:
-- 반말, 한 문장만
-- 이모지 없거나 최대 1개
-- 짧고 자연스럽게
+- 반말로만
+- 이모지 금지 (진짜 감정 표현할 때만 딱 1개)
+- 문장 끝나면 반드시 줄바꿈
+- 2~3문장 이내
 - 존댓말/공손함 금지
+- 말 이어쓰기 금지, 문장마다 개행
 {f'상황: {context}' if context else ''}
 {f'최근 대화:{chr(10)}{history_text}' if history_text else ''}"""
 
